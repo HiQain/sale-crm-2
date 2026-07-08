@@ -1,6 +1,5 @@
 import { ReactNode } from "react";
-import { Sidebar } from "./Sidebar";
-import { Header } from "./Header";
+import { TopNav } from "./TopNav";
 import { ProtectedRoute } from "@/contexts/AuthContext";
 
 interface AppLayoutProps {
@@ -11,14 +10,11 @@ interface AppLayoutProps {
 export function AppLayout({ children, requireAdmin = false }: AppLayoutProps) {
   return (
     <ProtectedRoute requireAdmin={requireAdmin}>
-      <div className="flex h-screen w-full bg-background overflow-hidden">
-        <Sidebar />
-        <div className="flex-1 flex flex-col h-full overflow-hidden">
-          <Header />
-          <main className="flex-1 overflow-y-auto p-8">
-            {children}
-          </main>
-        </div>
+      <div className="flex flex-col min-h-screen bg-background">
+        <TopNav />
+        <main className="flex-1 p-8">
+          {children}
+        </main>
       </div>
     </ProtectedRoute>
   );

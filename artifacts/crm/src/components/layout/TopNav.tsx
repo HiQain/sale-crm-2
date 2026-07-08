@@ -1,24 +1,40 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
-import { ChevronRight, LogOut, KeyRound, User as UserIcon } from "lucide-react";
-import { NotificationsPanel } from "./NotificationsPanel";
+import { Link, useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLogout } from "@workspace/api-client-react";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuSeparator, DropdownMenuTrigger,
+  LayoutDashboard,
+  Users,
+  Building2,
+  Target,
+  CheckSquare,
+  Activity,
+  LogOut,
+  KeyRound,
+} from "lucide-react";
+import { NotificationsPanel } from "./NotificationsPanel";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 
-export function Header() {
-  const [location, setLocation] = useLocation();
+export function TopNav() {
   const { user, setUser } = useAuth();
+  const [location, setLocation] = useLocation();
   const { toast } = useToast();
   const logout = useLogout();
 
@@ -28,20 +44,18 @@ export function Header() {
   const [confirmPw, setConfirmPw] = useState("");
   const [pwLoading, setPwLoading] = useState(false);
 
-  /* breadcrumbs */
-  const parts = location.split("/").filter(Boolean);
-  const breadcrumbs = parts.map((part, i) => {
-    const isLast = i === parts.length - 1;
-    const name = part.charAt(0).toUpperCase() + part.slice(1);
-    return (
-      <div key={i} className="flex items-center">
-        {i > 0 && <ChevronRight className="w-4 h-4 mx-2 text-muted-foreground" />}
-        <span className={isLast ? "font-medium text-foreground" : "text-muted-foreground"}>
-          {name}
-        </span>
-      </div>
-    );
-  });
+  const isAdmin = user?.role === "admin";
+  const basePath = isAdmin ? "/admin" : "/user";
+
+  const navItems = [
+    { name: "Dashboard", path: basePath, icon: LayoutDashboard },
+    ...(isAdmin ? [{ name: "Users", path: "/admin/users", icon: Users }] : []),
+    { name: "Contacts", path: `${basePath}/contacts`, icon: Users },
+    ...(isAdmin ? [{ name: "Companies", path: "/admin/companies", icon: Building2 }] : []),
+    { name: "Deals", path: `${basePath}/deals`, icon: Target },
+    { name: "Tasks", path: `${basePath}/tasks`, icon: CheckSquare },
+    { name: "Activities", path: `${basePath}/activities`, icon: Activity },
+  ];
 
   const handleLogout = () => {
     logout.mutate(undefined, {
@@ -83,26 +97,52 @@ export function Header() {
 
   return (
     <>
-      <header className="h-16 bg-card border-b border-border flex items-center px-8 justify-between shadow-sm z-10 sticky top-0">
-        <div className="flex items-center text-sm">
-          {breadcrumbs.length > 0
-            ? breadcrumbs
-            : <span className="font-medium text-foreground">Dashboard</span>}
-        </div>
+      <header className="h-14 bg-sidebar text-sidebar-foreground border-b border-sidebar-border sticky top-0 z-50 flex items-center px-4 gap-6 shadow-sm">
+        {/* Logo */}
+        <Link href={basePath} className="flex items-center gap-2 shrink-0 mr-2">
+          <div className="w-7 h-7 rounded bg-primary flex items-center justify-center">
+            <Target className="w-4 h-4 text-primary-foreground" />
+          </div>
+          <span className="font-bold text-base tracking-tight text-white">NexusCRM</span>
+        </Link>
 
-        <div className="flex items-center gap-4">
+        {/* Nav links */}
+        <nav className="flex items-center gap-1 flex-1 overflow-x-auto scrollbar-none">
+          {navItems.map((item) => {
+            const isActive =
+              location === item.path ||
+              (item.path !== basePath && location.startsWith(item.path));
+            const Icon = item.icon;
+            return (
+              <Link
+                key={item.path}
+                href={item.path}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium whitespace-nowrap transition-colors ${
+                  isActive
+                    ? "bg-sidebar-accent text-white"
+                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-white"
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5 shrink-0" />
+                {item.name}
+              </Link>
+            );
+          })}
+        </nav>
+
+        {/* Right side: notifications + user */}
+        <div className="flex items-center gap-2 shrink-0 ml-auto">
           <NotificationsPanel />
 
-          {/* Profile dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-                <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold select-none">
+              <button className="flex items-center gap-2 hover:opacity-80 transition-opacity rounded-md px-2 py-1">
+                <div className="w-7 h-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold select-none">
                   {user?.name?.charAt(0).toUpperCase() ?? "?"}
                 </div>
                 <div className="text-left hidden sm:block">
-                  <p className="text-sm font-medium leading-none">{user?.name}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5 capitalize">{user?.role}</p>
+                  <p className="text-xs font-semibold text-white leading-none">{user?.name}</p>
+                  <p className="text-[11px] text-sidebar-foreground/60 mt-0.5 capitalize">{user?.role}</p>
                 </div>
               </button>
             </DropdownMenuTrigger>
@@ -137,30 +177,15 @@ export function Header() {
           <div className="space-y-4 pt-2">
             <div className="space-y-1.5">
               <Label>Current Password</Label>
-              <Input
-                type="password"
-                value={currentPw}
-                onChange={e => setCurrentPw(e.target.value)}
-                placeholder="Your current password"
-              />
+              <Input type="password" value={currentPw} onChange={e => setCurrentPw(e.target.value)} placeholder="Your current password" />
             </div>
             <div className="space-y-1.5">
               <Label>New Password</Label>
-              <Input
-                type="password"
-                value={newPw}
-                onChange={e => setNewPw(e.target.value)}
-                placeholder="Min 6 characters"
-              />
+              <Input type="password" value={newPw} onChange={e => setNewPw(e.target.value)} placeholder="Min 6 characters" />
             </div>
             <div className="space-y-1.5">
               <Label>Confirm New Password</Label>
-              <Input
-                type="password"
-                value={confirmPw}
-                onChange={e => setConfirmPw(e.target.value)}
-                placeholder="Repeat new password"
-              />
+              <Input type="password" value={confirmPw} onChange={e => setConfirmPw(e.target.value)} placeholder="Repeat new password" />
             </div>
           </div>
           <DialogFooter className="pt-2">
