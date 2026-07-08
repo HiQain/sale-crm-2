@@ -7,3 +7,4 @@ export * from "./activities";
 export * from "./leads";
 export * from "./client_journeys";
 export * from "./billings";
+export * from "./user_preferences";

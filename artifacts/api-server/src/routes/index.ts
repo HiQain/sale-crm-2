@@ -11,6 +11,7 @@ import dashboardRouter from "./dashboard";
 import leadsRouter from "./leads";
 import clientJourneysRouter from "./client-journeys";
 import billingsRouter from "./billings";
+import preferencesRouter from "./preferences";
 
 const router: IRouter = Router();
 
@@ -26,5 +27,6 @@ router.use(dashboardRouter);
 router.use(leadsRouter);
 router.use(clientJourneysRouter);
 router.use(billingsRouter);
+router.use(preferencesRouter);
 
 export default router;
