@@ -12,6 +12,7 @@ import leadsRouter from "./leads";
 import clientJourneysRouter from "./client-journeys";
 import billingsRouter from "./billings";
 import preferencesRouter from "./preferences";
+import leadColumnsRouter from "./lead-columns";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use(leadsRouter);
 router.use(clientJourneysRouter);
 router.use(billingsRouter);
 router.use(preferencesRouter);
+router.use(leadColumnsRouter);
 
 export default router;

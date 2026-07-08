@@ -1,4 +1,4 @@
-import { pgTable, serial, text, real, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, real, timestamp, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users";
@@ -16,9 +16,10 @@ export const leadsTable = pgTable("leads", {
   leadValue: real("lead_value").notNull().default(0),
   leadAssignee: text("lead_assignee"),    // "admin" / user name shown in Lead column
   status: text("status").notNull().default("pending"), // pending|contacted|paid
-  ownerId: integer("owner_id").references(() => usersTable.id, { onDelete: "set null" }),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  ownerId:    integer("owner_id").references(() => usersTable.id, { onDelete: "set null" }),
+  customData: jsonb("custom_data").notNull().default({}),
+  createdAt:  timestamp("created_at").notNull().defaultNow(),
+  updatedAt:  timestamp("updated_at").notNull().defaultNow(),
 });
 
 export const insertLeadSchema = createInsertSchema(leadsTable).omit({

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, leadsTable, usersTable } from "@workspace/db";
-import { eq, ilike, and, sql, sum, count } from "drizzle-orm";
+import { eq, ilike, and, sql, sum, count, asc } from "drizzle-orm";
 import { requireAuth } from "../lib/auth";
 
 const router = Router();
@@ -90,7 +90,13 @@ router.patch("/leads/:id", requireAuth, async (req, res) => {
     const fields = ["contact","email","businessOwner","businessName","service","response","followUp","leadValue","leadAssignee","status"];
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     for (const f of fields) if (req.body[f] !== undefined) updates[f] = req.body[f];
-    const [lead] = await db.update(leadsTable).set(updates).where(eq(leadsTable.id, id)).returning();
+
+    // Merge custom_data patch (if provided) with existing JSONB
+    if (req.body.customData && typeof req.body.customData === "object") {
+      updates.customData = sql`custom_data || ${JSON.stringify(req.body.customData)}::jsonb`;
+    }
+
+    const [lead] = await db.update(leadsTable).set(updates as any).where(eq(leadsTable.id, id)).returning();
     if (!lead) { res.status(404).json({ error: "Not found" }); return; }
     res.json(lead);
   } catch (err) {
