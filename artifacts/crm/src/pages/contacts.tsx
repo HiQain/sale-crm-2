@@ -1,0 +1,195 @@
+import { useState } from "react";
+import { 
+  useListContacts, 
+  useCreateContact,
+  useUpdateContact, 
+  useDeleteContact, 
+  getListContactsQueryKey, 
+  Contact,
+  ContactInputStatus,
+  ContactInput
+} from "@workspace/api-client-react";
+import { DataGrid, Column } from "@/components/ui/data-grid";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Loader2 } from "lucide-react";
+
+const createSchema = z.object({
+  firstName: z.string().min(1, "First name is required"),
+  lastName: z.string().min(1, "Last name is required"),
+  email: z.string().email("Invalid email").optional().or(z.literal("")),
+  phone: z.string().optional().or(z.literal("")),
+  status: z.enum(["lead", "prospect", "customer", "churned", "inactive"]).default("lead"),
+});
+
+export default function Contacts() {
+  const [search, setSearch] = useState("");
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const queryClient = useQueryClient();
+  const { toast } = useToast?.() || { toast: () => {} };
+  
+  const queryKey = getListContactsQueryKey(search ? { search } : undefined);
+  const { data: contacts = [], isLoading } = useListContacts(
+    search ? { search } : undefined, 
+    { query: { queryKey } }
+  );
+  
+  const createContact = useCreateContact();
+  const updateContact = useUpdateContact();
+  const deleteContact = useDeleteContact();
+
+  const form = useForm<z.infer<typeof createSchema>>({
+    resolver: zodResolver(createSchema),
+    defaultValues: {
+      firstName: "",
+      lastName: "",
+      email: "",
+      phone: "",
+      status: "lead",
+    },
+  });
+
+  const onSubmitCreate = (values: z.infer<typeof createSchema>) => {
+    createContact.mutate({ data: values as ContactInput }, {
+      onSuccess: (newContact) => {
+        queryClient.setQueryData(queryKey, (old: Contact[]) => old ? [newContact, ...old] : [newContact]);
+        setIsCreateOpen(false);
+        form.reset();
+        toast?.({ title: "Success", description: "Contact created successfully." });
+      },
+      onError: () => {
+        toast?.({ title: "Error", description: "Failed to create contact.", variant: "destructive" });
+      }
+    });
+  };
+
+  const handleEdit = (row: Contact, key: keyof Contact, value: string) => {
+    updateContact.mutate({ id: row.id, data: { [key]: value } }, {
+      onSuccess: (updated) => {
+         queryClient.setQueryData(queryKey, (old: Contact[]) =>
+           old?.map(c => c.id === updated.id ? updated : c)
+         );
+      },
+      onError: () => {
+        toast?.({ title: "Error", description: "Failed to update contact.", variant: "destructive" });
+      }
+    });
+  };
+
+  const handleDelete = (row: Contact) => {
+    deleteContact.mutate({ id: row.id }, {
+      onSuccess: () => {
+         queryClient.setQueryData(queryKey, (old: Contact[]) =>
+           old?.filter(c => c.id !== row.id)
+         );
+         toast?.({ title: "Deleted", description: "Contact has been deleted." });
+      }
+    });
+  };
+
+  const columns: Column<Contact>[] = [
+    { key: "firstName", header: "First Name" },
+    { key: "lastName", header: "Last Name" },
+    { key: "email", header: "Email" },
+    { key: "phone", header: "Phone" },
+    { key: "companyName", header: "Company", editable: false },
+    { key: "status", header: "Status", render: (r) => <StatusBadge status={r.status!} type="contact" /> },
+    { key: "ownerName", header: "Owner", editable: false },
+  ];
+
+  return (
+    <div className="h-[calc(100vh-8rem)]">
+      <DataGrid
+        title="Contacts Database"
+        data={contacts}
+        columns={columns}
+        keyExtractor={r => r.id}
+        isLoading={isLoading}
+        onEdit={handleEdit}
+        onDelete={handleDelete}
+        onSearch={setSearch}
+        searchPlaceholder="Search by name, email..."
+        onAdd={() => setIsCreateOpen(true)}
+      />
+
+      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Add New Contact</DialogTitle>
+          </DialogHeader>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmitCreate)} className="space-y-4 pt-4">
+              <div className="grid grid-cols-2 gap-4">
+                <FormField control={form.control} name="firstName" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>First Name</FormLabel>
+                    <FormControl><Input {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="lastName" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Last Name</FormLabel>
+                    <FormControl><Input {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </div>
+              <FormField control={form.control} name="email" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Email</FormLabel>
+                  <FormControl><Input type="email" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="phone" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Phone</FormLabel>
+                  <FormControl><Input {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="status" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Status</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select status" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="lead">Lead</SelectItem>
+                      <SelectItem value="prospect">Prospect</SelectItem>
+                      <SelectItem value="customer">Customer</SelectItem>
+                      <SelectItem value="churned">Churned</SelectItem>
+                      <SelectItem value="inactive">Inactive</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <DialogFooter className="pt-4">
+                <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>Cancel</Button>
+                <Button type="submit" disabled={createContact.isPending}>
+                  {createContact.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                  Create Contact
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
