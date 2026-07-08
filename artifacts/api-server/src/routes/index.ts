@@ -8,6 +8,9 @@ import dealsRouter from "./deals";
 import tasksRouter from "./tasks";
 import activitiesRouter from "./activities";
 import dashboardRouter from "./dashboard";
+import leadsRouter from "./leads";
+import clientJourneysRouter from "./client-journeys";
+import billingsRouter from "./billings";
 
 const router: IRouter = Router();
 
@@ -20,5 +23,8 @@ router.use(dealsRouter);
 router.use(tasksRouter);
 router.use(activitiesRouter);
 router.use(dashboardRouter);
+router.use(leadsRouter);
+router.use(clientJourneysRouter);
+router.use(billingsRouter);
 
 export default router;

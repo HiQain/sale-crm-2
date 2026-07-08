@@ -4,3 +4,6 @@ export * from "./contacts";
 export * from "./deals";
 export * from "./tasks";
 export * from "./activities";
+export * from "./leads";
+export * from "./client_journeys";
+export * from "./billings";

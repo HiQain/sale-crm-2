@@ -14,6 +14,9 @@ import Deals from "@/pages/deals";
 import Tasks from "@/pages/tasks";
 import Users from "@/pages/users";
 import Activities from "@/pages/activities";
+import Leads from "@/pages/leads";
+import ClientJourneys from "@/pages/client-journeys";
+import Billings from "@/pages/billings";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -64,6 +67,15 @@ function Router() {
       </Route>
       <Route path="/admin/activities">
         <AppLayout requireAdmin><Activities /></AppLayout>
+      </Route>
+      <Route path="/admin/leads">
+        <AppLayout requireAdmin><Leads /></AppLayout>
+      </Route>
+      <Route path="/admin/client-journeys">
+        <AppLayout requireAdmin><ClientJourneys /></AppLayout>
+      </Route>
+      <Route path="/admin/billings">
+        <AppLayout requireAdmin><Billings /></AppLayout>
       </Route>
 
       {/* User Routes */}
