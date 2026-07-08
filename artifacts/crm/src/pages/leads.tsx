@@ -140,7 +140,7 @@ function SortableColHeader({ col }: { col: ColumnDef }) {
         position: "relative",
         whiteSpace: "nowrap",
       }}
-      className="text-xs font-semibold uppercase tracking-wider text-muted-foreground h-10 px-4 select-none"
+      className="text-xs font-semibold uppercase tracking-wider text-muted-foreground h-10 px-2 select-none"
       {...attributes}
       {...listeners}
     >
@@ -196,7 +196,7 @@ function SortableLeadRow({ lead, index, visibleCols, onDelete, isDeleting }: Sor
       </TableCell>
 
       {visibleCols.map(col => (
-        <TableCell key={col.key} className="px-4 py-2.5 text-sm border-r border-border/30 last:border-r-0 max-w-[160px]">
+        <TableCell key={col.key} className="px-2 py-2.5 text-sm border-r border-border/30 last:border-r-0 max-w-[160px]">
           {col.key === "status" ? (
             <LeadStatusBadge status={lead.status} />
           ) : col.key === "leadValue" ? (
@@ -207,7 +207,7 @@ function SortableLeadRow({ lead, index, visibleCols, onDelete, isDeleting }: Sor
         </TableCell>
       ))}
 
-      <TableCell className="px-4 py-2.5 text-right">
+      <TableCell className="px-2 py-2.5 text-right">
         <Button
           variant="ghost" size="sm"
           className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
@@ -520,7 +520,7 @@ export default function Leads() {
                 <TableRow className="bg-muted/20 font-medium border-t-2 border-border">
                   <TableCell className="w-8 px-1" />
                   {visibleCols.map(col => (
-                    <TableCell key={col.key} className="px-4 py-2.5 text-sm border-r border-border/30 last:border-r-0">
+                    <TableCell key={col.key} className="px-2 py-2.5 text-sm border-r border-border/30 last:border-r-0">
                       {col.key === "leadValue"
                         ? formatCurrency(leads.reduce((s, r) => s + (r.leadValue || 0), 0))
                         : ""}
