@@ -7,13 +7,7 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { AppLayout } from "@/components/layout/AppLayout";
 
 import Login from "@/pages/login";
-import Dashboard from "@/pages/dashboard";
-import Contacts from "@/pages/contacts";
-import Companies from "@/pages/companies";
-import Deals from "@/pages/deals";
-import Tasks from "@/pages/tasks";
 import Users from "@/pages/users";
-import Activities from "@/pages/activities";
 import Leads from "@/pages/leads";
 import ClientJourneys from "@/pages/client-journeys";
 import Billings from "@/pages/billings";
@@ -24,20 +18,17 @@ const queryClient = new QueryClient({
     queries: {
       retry: 1,
       refetchOnWindowFocus: false,
-      staleTime: 30_000,        // 30s — don't re-fetch if data is fresh
-      gcTime: 5 * 60_000,       // 5 min cache
+      staleTime: 30_000,
+      gcTime: 5 * 60_000,
     },
   },
 });
 
-// A component to automatically redirect logged in users from root
 function RootRedirect() {
   const { user, isLoading } = useAuth();
-  
   if (isLoading) return null;
   if (!user) return <Redirect to="/login" />;
-  
-  return <Redirect to={user.role === "admin" ? "/admin" : "/user"} />;
+  return <Redirect to={user.role === "admin" ? "/admin/leads" : "/user/leads"} />;
 }
 
 function Router() {
@@ -48,25 +39,7 @@ function Router() {
 
       {/* Admin Routes */}
       <Route path="/admin">
-        <AppLayout requireAdmin><Dashboard /></AppLayout>
-      </Route>
-      <Route path="/admin/users">
-        <AppLayout requireAdmin><Users /></AppLayout>
-      </Route>
-      <Route path="/admin/contacts">
-        <AppLayout requireAdmin><Contacts /></AppLayout>
-      </Route>
-      <Route path="/admin/companies">
-        <AppLayout requireAdmin><Companies /></AppLayout>
-      </Route>
-      <Route path="/admin/deals">
-        <AppLayout requireAdmin><Deals /></AppLayout>
-      </Route>
-      <Route path="/admin/tasks">
-        <AppLayout requireAdmin><Tasks /></AppLayout>
-      </Route>
-      <Route path="/admin/activities">
-        <AppLayout requireAdmin><Activities /></AppLayout>
+        <Redirect to="/admin/leads" />
       </Route>
       <Route path="/admin/leads">
         <AppLayout requireAdmin><Leads /></AppLayout>
@@ -77,23 +50,22 @@ function Router() {
       <Route path="/admin/billings">
         <AppLayout requireAdmin><Billings /></AppLayout>
       </Route>
+      <Route path="/admin/users">
+        <AppLayout requireAdmin><Users /></AppLayout>
+      </Route>
 
       {/* User Routes */}
       <Route path="/user">
-        {/* Users get the same dashboard view for this implementation, backend filters data */}
-        <AppLayout><Dashboard /></AppLayout>
+        <Redirect to="/user/leads" />
       </Route>
-      <Route path="/user/contacts">
-        <AppLayout><Contacts /></AppLayout>
+      <Route path="/user/leads">
+        <AppLayout><Leads /></AppLayout>
       </Route>
-      <Route path="/user/deals">
-        <AppLayout><Deals /></AppLayout>
+      <Route path="/user/client-journeys">
+        <AppLayout><ClientJourneys /></AppLayout>
       </Route>
-      <Route path="/user/tasks">
-        <AppLayout><Tasks /></AppLayout>
-      </Route>
-      <Route path="/user/activities">
-        <AppLayout><Activities /></AppLayout>
+      <Route path="/user/billings">
+        <AppLayout><Billings /></AppLayout>
       </Route>
 
       <Route component={NotFound} />

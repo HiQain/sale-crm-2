@@ -3,14 +3,12 @@ import { Link, useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLogout } from "@workspace/api-client-react";
 import {
-  LayoutDashboard,
   Users,
-  Building2,
   Target,
-  CheckSquare,
-  Activity,
+  CreditCard,
   LogOut,
   KeyRound,
+  Route,
 } from "lucide-react";
 import { NotificationsPanel } from "./NotificationsPanel";
 import {
@@ -48,13 +46,10 @@ export function TopNav() {
   const basePath = isAdmin ? "/admin" : "/user";
 
   const navItems = [
-    { name: "Dashboard", path: basePath, icon: LayoutDashboard },
+    { name: "Leads",          path: `${basePath}/leads`,           icon: Target },
+    { name: "Client Journey", path: `${basePath}/client-journeys`, icon: Route },
+    { name: "Billings",       path: `${basePath}/billings`,        icon: CreditCard },
     ...(isAdmin ? [{ name: "Users", path: "/admin/users", icon: Users }] : []),
-    { name: "Contacts", path: `${basePath}/contacts`, icon: Users },
-    ...(isAdmin ? [{ name: "Companies", path: "/admin/companies", icon: Building2 }] : []),
-    { name: "Deals", path: `${basePath}/deals`, icon: Target },
-    { name: "Tasks", path: `${basePath}/tasks`, icon: CheckSquare },
-    { name: "Activities", path: `${basePath}/activities`, icon: Activity },
   ];
 
   const handleLogout = () => {
@@ -99,7 +94,7 @@ export function TopNav() {
     <>
       <header className="h-14 bg-sidebar text-sidebar-foreground border-b border-sidebar-border sticky top-0 z-50 flex items-center px-4 gap-6 shadow-sm">
         {/* Logo */}
-        <Link href={basePath} className="flex items-center gap-2 shrink-0 mr-2">
+        <Link href={`${basePath}/leads`} className="flex items-center gap-2 shrink-0 mr-2">
           <div className="w-7 h-7 rounded bg-primary flex items-center justify-center">
             <Target className="w-4 h-4 text-primary-foreground" />
           </div>
@@ -111,7 +106,8 @@ export function TopNav() {
           {navItems.map((item) => {
             const isActive =
               location === item.path ||
-              (item.path !== basePath && location.startsWith(item.path));
+              location.startsWith(item.path + "/") ||
+              (item.path !== `${basePath}/leads` && location.startsWith(item.path));
             const Icon = item.icon;
             return (
               <Link
