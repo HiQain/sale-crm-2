@@ -60,6 +60,7 @@ const dateKeys = new Set(["invoiceDate", "paymentDate"]);
 
 export default function Billings() {
   const [search, setSearch] = useState("");
+  const [timeFilter, setTimeFilter] = useState("all");
   const [visible, setVisible] = useState<Set<string>>(new Set(COLUMNS.map(c => c.key)));
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [form, setForm] = useState<Partial<BillingRecord>>({ amount: 0, feeDeducted: 0, netCurrency: 0 });
@@ -92,13 +93,17 @@ export default function Billings() {
         <h1 className="text-2xl font-bold tracking-tight">Billings</h1>
         <div className="flex items-center gap-2">
           <ColumnsToggle columns={COLUMNS} visible={visible} onToggle={toggleCol} />
-          <Select defaultValue="all">
-            <SelectTrigger className="h-9 w-32 text-sm"><SelectValue /></SelectTrigger>
+          <Select value={timeFilter} onValueChange={setTimeFilter}>
+            <SelectTrigger className="h-9 w-36 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All time</SelectItem>
-              <SelectItem value="month">This month</SelectItem>
-              <SelectItem value="30d">Last 30 days</SelectItem>
-              <SelectItem value="year">This year</SelectItem>
+              <SelectItem value="7d">Last 7 days</SelectItem>
+              <SelectItem value="3m">Last 3 months</SelectItem>
+              <SelectItem value="6m">Last 6 months</SelectItem>
+              <SelectItem value="this_month">This month</SelectItem>
+              <SelectItem value="last_month">Last month</SelectItem>
+              <SelectItem value="this_year">This year</SelectItem>
+              <SelectItem value="last_year">Last year</SelectItem>
             </SelectContent>
           </Select>
           <div className="relative">
@@ -135,7 +140,7 @@ export default function Billings() {
               ) : billings.length === 0 ? (
                 <TableRow><TableCell colSpan={visibleCols.length + 1} className="h-32 text-center text-muted-foreground">No billing records yet.</TableCell></TableRow>
               ) : billings.map((row, i) => (
-                <TableRow key={row.id} className={i % 2 === 1 ? "bg-muted/10" : ""}>
+                <TableRow key={row.id} className={row.paymentDate ? "bg-green-50/60 dark:bg-green-900/10" : i % 2 === 1 ? "bg-muted/10" : ""}>
                   {visibleCols.map(col => (
                     <TableCell key={col.key} className="px-4 py-2.5 text-sm border-r border-border/30 last:border-r-0 max-w-[160px]">
                       {dateKeys.has(col.key) ? <span>{fmtDate((row as any)[col.key])}</span>

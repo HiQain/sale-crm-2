@@ -1,5 +1,6 @@
 import { ReactNode } from "react";
 import { TopNav } from "./TopNav";
+import { TimezoneBar } from "./TimezoneBar";
 import { ProtectedRoute } from "@/contexts/AuthContext";
 
 interface AppLayoutProps {
@@ -12,6 +13,7 @@ export function AppLayout({ children, requireAdmin = false }: AppLayoutProps) {
     <ProtectedRoute requireAdmin={requireAdmin}>
       <div className="flex flex-col min-h-screen bg-background">
         <TopNav />
+        <TimezoneBar />
         <main className="flex-1 p-8">
           {children}
         </main>

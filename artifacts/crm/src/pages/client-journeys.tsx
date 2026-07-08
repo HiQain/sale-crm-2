@@ -63,12 +63,12 @@ function fmtDate(d: string | null) {
 
 function JourneyStatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
-    pending: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
-    contacted: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-    paid: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+    pending:   "border border-gray-300 text-gray-600 bg-transparent dark:border-gray-600 dark:text-gray-400",
+    contacted: "bg-blue-500 text-white border border-blue-500",
+    paid:      "bg-green-500 text-white border border-green-500",
   };
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${map[status] ?? map.pending}`}>
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wide ${map[status] ?? map.pending}`}>
       {status}
     </span>
   );
@@ -76,6 +76,7 @@ function JourneyStatusBadge({ status }: { status: string }) {
 
 export default function ClientJourneys() {
   const [search, setSearch] = useState("");
+  const [timeFilter, setTimeFilter] = useState("all");
   const [visible, setVisible] = useState<Set<string>>(new Set(COLUMNS.map(c => c.key)));
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [form, setForm] = useState<Partial<JourneyRecord>>({ status: "pending", paidAmount: 0, balance: 0, total: 0 });
@@ -109,13 +110,17 @@ export default function ClientJourneys() {
         <h1 className="text-2xl font-bold tracking-tight">Client Journey</h1>
         <div className="flex items-center gap-2">
           <ColumnsToggle columns={COLUMNS} visible={visible} onToggle={toggleCol} />
-          <Select defaultValue="all">
-            <SelectTrigger className="h-9 w-32 text-sm"><SelectValue /></SelectTrigger>
+          <Select value={timeFilter} onValueChange={setTimeFilter}>
+            <SelectTrigger className="h-9 w-36 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All time</SelectItem>
-              <SelectItem value="month">This month</SelectItem>
-              <SelectItem value="30d">Last 30 days</SelectItem>
-              <SelectItem value="year">This year</SelectItem>
+              <SelectItem value="7d">Last 7 days</SelectItem>
+              <SelectItem value="3m">Last 3 months</SelectItem>
+              <SelectItem value="6m">Last 6 months</SelectItem>
+              <SelectItem value="this_month">This month</SelectItem>
+              <SelectItem value="last_month">Last month</SelectItem>
+              <SelectItem value="this_year">This year</SelectItem>
+              <SelectItem value="last_year">Last year</SelectItem>
             </SelectContent>
           </Select>
           <div className="relative">
@@ -152,7 +157,7 @@ export default function ClientJourneys() {
               ) : journeys.length === 0 ? (
                 <TableRow><TableCell colSpan={visibleCols.length + 1} className="h-32 text-center text-muted-foreground">No records yet.</TableCell></TableRow>
               ) : journeys.map((row, i) => (
-                <TableRow key={row.id} className={i % 2 === 1 ? "bg-muted/10" : ""}>
+                <TableRow key={row.id} className={row.status === "paid" ? "bg-green-50/60 dark:bg-green-900/10" : i % 2 === 1 ? "bg-muted/10" : ""}>
                   {visibleCols.map(col => (
                     <TableCell key={col.key} className="px-4 py-2.5 text-sm border-r border-border/30 last:border-r-0 max-w-[140px]">
                       {col.key === "status" ? <JourneyStatusBadge status={row.status} />

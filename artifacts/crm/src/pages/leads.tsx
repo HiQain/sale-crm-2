@@ -3,7 +3,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { StatCard, formatCurrency } from "@/components/ui/stat-card";
 import { ColumnsToggle, ColumnDef } from "@/components/ui/columns-toggle";
-import { StatusBadge } from "@/components/ui/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -16,7 +15,6 @@ import {
 } from "lucide-react";
 import React from "react";
 
-// ── Types ──────────────────────────────────────────────────────────
 interface LeadRecord {
   id: number;
   contact: string | null;
@@ -39,7 +37,6 @@ interface LeadsStats {
   totalRevenue: number;
 }
 
-// ── Column definitions ─────────────────────────────────────────────
 const COLUMNS: ColumnDef[] = [
   { key: "contact",       label: "Contact" },
   { key: "email",         label: "Email" },
@@ -53,7 +50,6 @@ const COLUMNS: ColumnDef[] = [
   { key: "status",        label: "Status" },
 ];
 
-// ── Fetchers ───────────────────────────────────────────────────────
 const fetchLeads = (search: string): Promise<LeadRecord[]> =>
   fetch(`/api/leads${search ? `?search=${encodeURIComponent(search)}` : ""}`, { credentials: "include" }).then(r => r.json());
 
@@ -66,9 +62,9 @@ const deleteLead = (id: number) =>
 const createLead = (data: Partial<LeadRecord>) =>
   fetch("/api/leads", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json());
 
-// ── Page ───────────────────────────────────────────────────────────
 export default function Leads() {
   const [search, setSearch] = useState("");
+  const [timeFilter, setTimeFilter] = useState("all");
   const [visible, setVisible] = useState<Set<string>>(new Set(COLUMNS.map(c => c.key)));
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [form, setForm] = useState<Partial<LeadRecord>>({ status: "pending", leadValue: 0 });
@@ -103,13 +99,17 @@ export default function Leads() {
         <h1 className="text-2xl font-bold tracking-tight">Global Leads Database</h1>
         <div className="flex items-center gap-2">
           <ColumnsToggle columns={COLUMNS} visible={visible} onToggle={toggleCol} />
-          <Select defaultValue="all">
-            <SelectTrigger className="h-9 w-32 text-sm"><SelectValue /></SelectTrigger>
+          <Select value={timeFilter} onValueChange={setTimeFilter}>
+            <SelectTrigger className="h-9 w-36 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All time</SelectItem>
-              <SelectItem value="month">This month</SelectItem>
-              <SelectItem value="30d">Last 30 days</SelectItem>
-              <SelectItem value="year">This year</SelectItem>
+              <SelectItem value="7d">Last 7 days</SelectItem>
+              <SelectItem value="3m">Last 3 months</SelectItem>
+              <SelectItem value="6m">Last 6 months</SelectItem>
+              <SelectItem value="this_month">This month</SelectItem>
+              <SelectItem value="last_month">Last month</SelectItem>
+              <SelectItem value="this_year">This year</SelectItem>
+              <SelectItem value="last_year">Last year</SelectItem>
             </SelectContent>
           </Select>
           <div className="relative">
@@ -149,7 +149,7 @@ export default function Leads() {
               ) : leads.length === 0 ? (
                 <TableRow><TableCell colSpan={visibleCols.length + 1} className="h-32 text-center text-muted-foreground">No leads yet. Add your first lead.</TableCell></TableRow>
               ) : leads.map((row, i) => (
-                <TableRow key={row.id} className={i % 2 === 1 ? "bg-muted/10" : ""}>
+                <TableRow key={row.id} className={row.status === "paid" ? "bg-green-50/60 dark:bg-green-900/10" : i % 2 === 1 ? "bg-muted/10" : ""}>
                   {visibleCols.map(col => (
                     <TableCell key={col.key} className="px-4 py-2.5 text-sm border-r border-border/30 last:border-r-0 max-w-[160px]">
                       {col.key === "status" ? (
@@ -236,12 +236,12 @@ export default function Leads() {
 
 function LeadStatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
-    pending: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
-    contacted: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-    paid: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+    pending:   "border border-gray-300 text-gray-600 bg-transparent dark:border-gray-600 dark:text-gray-400",
+    contacted: "bg-blue-500 text-white border border-blue-500",
+    paid:      "bg-green-500 text-white border border-green-500",
   };
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold uppercase tracking-wide ${map[status] ?? map.pending}`}>
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wide ${map[status] ?? map.pending}`}>
       {status}
     </span>
   );
