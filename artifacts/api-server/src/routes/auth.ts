@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { comparePassword, requireAuth } from "../lib/auth";
+import { comparePassword, hashPassword, requireAuth } from "../lib/auth";
 
 const router = Router();
 
@@ -37,6 +37,48 @@ router.post("/auth/login", async (req, res) => {
     res.json({ id: user.id, email: user.email, name: user.name, role: user.role });
   } catch (err) {
     req.log.error({ err }, "Login error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// PATCH /api/auth/change-password — any logged-in user can change their own password
+router.patch("/auth/change-password", requireAuth, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body as {
+      currentPassword: string; newPassword: string;
+    };
+    if (!currentPassword || !newPassword) {
+      res.status(400).json({ error: "currentPassword and newPassword are required" });
+      return;
+    }
+    if (newPassword.length < 6) {
+      res.status(400).json({ error: "New password must be at least 6 characters" });
+      return;
+    }
+    const [user] = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.id, req.session.userId!))
+      .limit(1);
+
+    if (!user) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+    const valid = await comparePassword(currentPassword, user.passwordHash);
+    if (!valid) {
+      res.status(401).json({ error: "Current password is incorrect" });
+      return;
+    }
+    const newHash = await hashPassword(newPassword);
+    await db
+      .update(usersTable)
+      .set({ passwordHash: newHash })
+      .where(eq(usersTable.id, user.id));
+
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error({ err }, "Change password error");
     res.status(500).json({ error: "Internal server error" });
   }
 });

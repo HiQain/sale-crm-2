@@ -127,13 +127,6 @@ export default function Login() {
               </Button>
             </form>
           </Form>
-
-          <div className="mt-6 border-t border-border pt-6">
-            <div className="text-sm text-muted-foreground text-center">
-              <p>Admin: admin@hiqain.com / password</p>
-              <p className="mt-1">User: sarah.chen@hiqain.com / password</p>
-            </div>
-          </div>
         </div>
       </div>
     </div>
