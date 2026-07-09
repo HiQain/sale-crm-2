@@ -1002,6 +1002,7 @@ export default function Leads() {
                           onCellDoubleClick={handleCellDoubleClick}
                           onCellSave={handleCellSave}
                           onCellCancel={() => setEditingCell(null)}
+                          onMultiValueUpdate={handleMultiValueUpdate}
                           onDelete={id => deleteMut.mutate(id)}
                           isDeleting={deleteMut.isPending}
                         />

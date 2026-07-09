@@ -24,9 +24,12 @@ lib/
 
 ## Running the Project
 
-Two workflows run automatically:
-- **CRM frontend** — `pnpm --filter @workspace/crm run dev`
-- **API server** — `pnpm --filter @workspace/api-server run dev`
+Three workflows run automatically:
+- **CRM frontend** — `pnpm --filter @workspace/crm run dev` (preview path `/`)
+- **API server** — `pnpm --filter @workspace/api-server run dev` (preview path `/api`)
+- **Canvas / Component Preview Server** — `pnpm --filter @workspace/mockup-sandbox run dev` (preview path `/__mockup`)
+
+Setup already done: `pnpm install`, `pnpm --filter @workspace/db run push` (applies Drizzle schema to Postgres). `DATABASE_URL` and `SESSION_SECRET` are already configured.
 
 ## Environment Variables
 
