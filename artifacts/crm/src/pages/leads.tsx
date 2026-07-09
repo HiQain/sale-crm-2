@@ -383,7 +383,7 @@ function SortableColHeader({ col, width, onResize, onResizeEnd }: {
   return (
     <TableHead ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1, cursor: isDragging ? "grabbing" : "grab", userSelect: "none", position: "relative", whiteSpace: "nowrap", width, minWidth: width, maxWidth: width }}
-      className="text-xs font-semibold uppercase tracking-wider text-muted-foreground h-10 px-1 select-none overflow-hidden"
+      className="text-xs font-semibold uppercase tracking-wider text-muted-foreground h-10 px-[10px] select-none overflow-hidden"
       {...attributes} {...listeners}>
       <span className="flex items-center gap-1.5 truncate">
         <GripVertical className="w-3 h-3 opacity-30 rotate-90 shrink-0" />
@@ -444,7 +444,7 @@ function SortableLeadRow({ lead, index, visibleCols, editingCell, highlighted, o
         if (isMulti) {
           return (
             <TableCell key={col.key}
-              className="px-1 py-0.5 border-r border-border/30 last:border-r-0 max-w-[180px]">
+              className="px-[10px] py-0.5 border-r border-border/30 last:border-r-0 max-w-[180px]">
               <MultiValueCell
                 values={getLeadMultiValues(lead, col.key)}
                 colKey={col.key}
@@ -459,7 +459,7 @@ function SortableLeadRow({ lead, index, visibleCols, editingCell, highlighted, o
         const isCompact = col.key === "followUp" || col.key === "leadValue" || col.key === "status";
         return (
           <TableCell key={col.key}
-            className={`px-1 border-r border-border/30 last:border-r-0 max-w-[160px] ${isCompact ? "py-0.5 text-xs" : "py-1 text-sm"}`}
+            className={`px-[10px] border-r border-border/30 last:border-r-0 max-w-[160px] ${isCompact ? "py-0.5 text-xs" : "py-1 text-sm"}`}
             onDoubleClick={() => !isEditing && onCellDoubleClick(lead.id, col.key, displayStr)}
             title={!isEditing && displayStr ? displayStr : undefined}>
             {isEditing ? (
@@ -554,7 +554,7 @@ function NewLeadRow({ visibleCols, onSave, onCancel }: {
         const inputType = col.inputType ?? col.colType ?? "text";
         const hasErr    = !!errors[col.key];
         return (
-          <TableCell key={col.key} className="px-1 py-1.5 border-r border-border/30 last:border-r-0">
+          <TableCell key={col.key} className="px-[10px] py-1.5 border-r border-border/30 last:border-r-0">
             {col.key === "status" ? (
               <select
                 value={data[fieldId] ?? "pending"}
@@ -1095,7 +1095,7 @@ export default function Leads() {
                   <TableRow className="bg-muted/20 font-medium border-t-2 border-border">
                     <TableCell className="w-6 px-0.5" />
                     {visibleCols.map(col => (
-                      <TableCell key={col.key} className="px-1 py-2.5 text-sm border-r border-border/30 last:border-r-0">
+                      <TableCell key={col.key} className="px-[10px] py-2.5 text-sm border-r border-border/30 last:border-r-0">
                         {col.key === "leadValue" ? formatCurrency(leads.reduce((s, r) => s + (r.leadValue || 0), 0)) : ""}
                       </TableCell>
                     ))}
