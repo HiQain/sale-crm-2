@@ -70,21 +70,22 @@ interface ColumnDef {
   fieldKey?: string;
   customId?: number;
   colType?: ColType;    // "text" | "number" | "date"
+  inputType?: string;   // HTML <input type="…"> override (email, tel, number, date…)
 }
 
 // ─── Built-in columns ────────────────────────────────────────────────────────
 
 const BUILTIN_COLUMNS: ColumnDef[] = [
-  { key: "contact",       label: "Contact" },
-  { key: "email",         label: "Email" },
+  { key: "contact",       label: "Contact",       inputType: "tel"    },
+  { key: "email",         label: "Email",         inputType: "email"  },
   { key: "businessOwner", label: "Business Owner" },
-  { key: "businessName",  label: "Business Name" },
-  { key: "service",       label: "Service" },
-  { key: "response",      label: "Response" },
-  { key: "followUp",      label: "Follow Up" },
-  { key: "leadValue",     label: "Lead Value",  colType: "number" },
-  { key: "leadAssignee",  label: "Lead" },
-  { key: "status",        label: "Status" },
+  { key: "businessName",  label: "Business Name"  },
+  { key: "service",       label: "Service"        },
+  { key: "response",      label: "Response"       },
+  { key: "followUp",      label: "Follow Up",     colType: "date",   inputType: "date"   },
+  { key: "leadValue",     label: "Lead Value",    colType: "number", inputType: "number" },
+  { key: "leadAssignee",  label: "Lead"           },
+  { key: "status",        label: "Status"         },
 ];
 
 const STATUS_OPTIONS = ["pending", "contacted", "paid"];
@@ -125,14 +126,30 @@ const api = {
 
 // ─── Inline Cell Editor ───────────────────────────────────────────────────────
 
-function CellEditor({ colKey, colType, value, onSave, onCancel }: {
-  colKey: string; colType?: ColType; value: string;
+// Per-key validation used by both CellEditor and NewLeadRow
+function validateFieldValue(key: string, value: string): string {
+  if (!value.trim()) return "";
+  if (key === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim()))
+    return "Invalid email format";
+  if ((key === "leadValue") && (isNaN(parseFloat(value)) || parseFloat(value) < 0))
+    return "Must be a positive number";
+  return "";
+}
+
+function CellEditor({ colKey, colType, inputType: inputTypeProp, value, onSave, onCancel }: {
+  colKey: string; colType?: ColType; inputType?: string; value: string;
   onSave: (v: string) => void; onCancel: () => void;
 }) {
-  const [val, setVal] = useState(value);
+  const [val, setVal]     = useState(value);
+  const [err, setErr]     = useState("");
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => { ref.current?.focus(); ref.current?.select(); }, []);
-  const commit = () => onSave(val);
+
+  const commit = () => {
+    const e = validateFieldValue(colKey, val);
+    if (e) { setErr(e); return; }
+    onSave(val);
+  };
   const onKey = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") { e.preventDefault(); commit(); }
     if (e.key === "Escape") { e.preventDefault(); onCancel(); }
@@ -144,19 +161,29 @@ function CellEditor({ colKey, colType, value, onSave, onCancel }: {
       <select autoFocus value={val}
         className="w-full text-xs font-bold uppercase border border-primary/40 rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary px-1.5 py-0.5 cursor-pointer"
         onChange={e => { setVal(e.target.value); onSave(e.target.value); }}
-        onBlur={commit}
+        onBlur={() => onSave(val)}
         onKeyDown={e => { if (e.key === "Escape") onCancel(); e.stopPropagation(); }}>
         {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
       </select>
     );
   }
 
-  const inputType = colType ?? (colKey === "leadValue" ? "number" : "text");
+  const inputType = inputTypeProp ?? colType ?? "text";
   return (
-    <input ref={ref} type={inputType} value={val}
-      className="w-full min-w-[80px] text-sm border border-primary/40 rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary px-1.5 py-0.5"
-      onChange={e => setVal(e.target.value)} onBlur={commit} onKeyDown={onKey}
-    />
+    <div className="relative">
+      <input ref={ref} type={inputType} value={val}
+        title={err || undefined}
+        className={`w-full min-w-[80px] text-sm border rounded-md bg-background focus:outline-none focus:ring-1 px-1.5 py-0.5 transition-colors
+          ${err ? "border-destructive focus:ring-destructive" : "border-primary/40 focus:ring-primary"}`}
+        onChange={e => { setVal(e.target.value); if (err) setErr(validateFieldValue(colKey, e.target.value)); }}
+        onBlur={commit} onKeyDown={onKey}
+      />
+      {err && (
+        <div className="absolute top-full left-0 mt-0.5 text-[10px] text-destructive whitespace-nowrap bg-background border border-destructive/30 rounded px-1.5 py-0.5 z-30 shadow-sm">
+          {err}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -221,7 +248,7 @@ function SortableLeadRow({ lead, index, visibleCols, editingCell, highlighted, o
             onDoubleClick={() => !isEditing && onCellDoubleClick(lead.id, col.key, displayStr)}
             title="Double-click to edit">
             {isEditing ? (
-              <CellEditor colKey={col.key} colType={col.colType} value={displayStr}
+              <CellEditor colKey={col.key} colType={col.colType} inputType={col.inputType} value={displayStr}
                 onSave={v => onCellSave(lead.id, col, v)} onCancel={onCellCancel} />
             ) : col.key === "status" ? (
               <LeadStatusBadge status={lead.status} />
@@ -254,11 +281,32 @@ function NewLeadRow({ visibleCols, onSave, onCancel }: {
   onSave: (d: Partial<LeadRecord>) => void;
   onCancel: () => void;
 }) {
-  const [data, setData] = useState<Record<string, string>>({ status: "pending", leadValue: "0" });
+  const [data,   setData]   = useState<Record<string, string>>({ status: "pending", leadValue: "0" });
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const firstRef = useRef<HTMLInputElement>(null);
   useEffect(() => { firstRef.current?.focus(); }, []);
 
+  // first non-status column key → gets the autofocus ref
+  const firstInputKey = visibleCols.find(c => c.key !== "status")?.key ?? "";
+
+  const handleChange = (fieldId: string, colKey: string, value: string) => {
+    setData(d => ({ ...d, [fieldId]: value }));
+    // Clear error as soon as field is valid again
+    if (errors[colKey]) setErrors(e => ({ ...e, [colKey]: validateFieldValue(colKey, value) }));
+  };
+
   const commit = () => {
+    // Validate every filled field; block save only on format errors
+    const newErrs: Record<string, string> = {};
+    let hasErr = false;
+    visibleCols.forEach(col => {
+      const fieldId = col.isCustom ? col.fieldKey! : col.key;
+      const val = data[fieldId] ?? "";
+      const err = validateFieldValue(col.key, val);
+      if (err) { newErrs[col.key] = err; hasErr = true; }
+    });
+    if (hasErr) { setErrors(newErrs); return; }
+
     const payload: any = { ...data };
     const builtinKeys = new Set(BUILTIN_COLUMNS.map(c => c.key));
     const customData: Record<string, string> = {};
@@ -270,44 +318,57 @@ function NewLeadRow({ visibleCols, onSave, onCancel }: {
     onSave(payload);
   };
 
-  const onKey = (e: React.KeyboardEvent, idx: number) => {
+  const onKey = (e: React.KeyboardEvent) => {
     e.stopPropagation();
     if (e.key === "Escape") { onCancel(); return; }
-    if (e.key === "Enter" && idx === visibleCols.length - 1) commit();
-    if (e.key === "Tab" && idx === visibleCols.length - 1 && !e.shiftKey) { e.preventDefault(); commit(); }
+    // Enter on ANY field saves — no need to tab to the last column first
+    if (e.key === "Enter") { e.preventDefault(); commit(); }
   };
 
   return (
     <TableRow className="bg-primary/5 border-y border-primary/30">
       <TableCell className="w-6 px-0.5 py-1.5" />
-      {visibleCols.map((col, idx) => {
-        const fieldId = col.isCustom ? col.fieldKey! : col.key;
-        const inputType = col.colType ?? (col.key === "leadValue" ? "number" : "text");
+      {visibleCols.map(col => {
+        const fieldId   = col.isCustom ? col.fieldKey! : col.key;
+        const inputType = col.inputType ?? col.colType ?? "text";
+        const hasErr    = !!errors[col.key];
         return (
-          <TableCell key={col.key} className="px-1 py-1 border-r border-border/30 last:border-r-0">
+          <TableCell key={col.key} className="px-1 py-1.5 border-r border-border/30 last:border-r-0">
             {col.key === "status" ? (
-              <select value={data[fieldId] ?? "pending"}
+              <select
+                value={data[fieldId] ?? "pending"}
                 className="w-full text-xs font-bold uppercase border border-border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary px-1.5 py-0.5 cursor-pointer"
                 onChange={e => setData(d => ({ ...d, [fieldId]: e.target.value }))}
-                onKeyDown={e => onKey(e, idx)}>
+                onKeyDown={e => { e.stopPropagation(); if (e.key === "Enter") { e.preventDefault(); commit(); } if (e.key === "Escape") onCancel(); }}>
                 {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             ) : (
-              <input
-                ref={idx === 0 ? firstRef : undefined}
-                type={inputType}
-                placeholder={col.label}
-                value={data[fieldId] ?? ""}
-                className="w-full min-w-[60px] text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary px-1.5 py-0.5 placeholder:text-muted-foreground/50"
-                onChange={e => setData(d => ({ ...d, [fieldId]: e.target.value }))}
-                onKeyDown={e => onKey(e, idx)}
-              />
+              <div className="relative">
+                <input
+                  ref={col.key === firstInputKey ? firstRef : undefined}
+                  type={inputType}
+                  placeholder={col.label}
+                  value={data[fieldId] ?? ""}
+                  title={hasErr ? errors[col.key] : undefined}
+                  className={`w-full min-w-[60px] text-sm border rounded-md bg-background focus:outline-none focus:ring-1 px-1.5 py-0.5 placeholder:text-muted-foreground/50 transition-colors
+                    ${hasErr
+                      ? "border-destructive focus:ring-destructive placeholder:text-destructive/40"
+                      : "border-border focus:ring-primary"}`}
+                  onChange={e => handleChange(fieldId, col.key, e.target.value)}
+                  onKeyDown={onKey}
+                />
+                {hasErr && (
+                  <div className="absolute top-full left-0 mt-0.5 text-[10px] text-destructive bg-background border border-destructive/30 rounded px-1.5 py-0.5 z-30 shadow-sm whitespace-nowrap pointer-events-none">
+                    {errors[col.key]}
+                  </div>
+                )}
+              </div>
             )}
           </TableCell>
         );
       })}
-      <TableCell className="px-1 py-1 text-right w-8">
-        <button className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors" onClick={onCancel} title="Cancel">
+      <TableCell className="px-1 py-1.5 text-right w-8">
+        <button className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors" onClick={onCancel} title="Cancel (Esc)">
           <X className="w-3.5 h-3.5" />
         </button>
       </TableCell>
