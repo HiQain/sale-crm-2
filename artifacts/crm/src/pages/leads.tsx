@@ -55,7 +55,11 @@ interface LeadsStats {
 
 interface LeadsPrefs {
   columnOrder: string[]; hiddenColumns: string[]; rowOrder: number[];
+  columnWidths?: Record<string, number>;
 }
+
+const DEFAULT_COL_WIDTH = 160;
+const MIN_COL_WIDTH = 80;
 
 interface CustomColRecord {
   id: number;
@@ -341,19 +345,57 @@ function MultiValueCell({ values, colKey, inputType, onUpdate }: {
 
 // ─── Sortable Column Header ───────────────────────────────────────────────────
 
-function SortableColHeader({ col }: { col: ColumnDef }) {
+function SortableColHeader({ col, width, onResize, onResizeEnd }: {
+  col: ColumnDef;
+  width: number;
+  onResize: (key: string, width: number) => void;
+  onResizeEnd: (key: string, width: number) => void;
+}) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: col.key });
+  const resizing = useRef(false);
+
+  const startResize = (e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    resizing.current = true;
+    const startX = e.clientX;
+    const startWidth = width;
+    const onMove = (ev: PointerEvent) => {
+      if (!resizing.current) return;
+      const next = Math.max(MIN_COL_WIDTH, startWidth + (ev.clientX - startX));
+      onResize(col.key, next);
+    };
+    const onUp = (ev: PointerEvent) => {
+      resizing.current = false;
+      const next = Math.max(MIN_COL_WIDTH, startWidth + (ev.clientX - startX));
+      onResizeEnd(col.key, next);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+
   return (
     <TableHead ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1, cursor: isDragging ? "grabbing" : "grab", userSelect: "none", position: "relative", whiteSpace: "nowrap" }}
-      className="text-xs font-semibold uppercase tracking-wider text-muted-foreground h-10 px-1 select-none"
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1, cursor: isDragging ? "grabbing" : "grab", userSelect: "none", position: "relative", whiteSpace: "nowrap", width, minWidth: width, maxWidth: width }}
+      className="text-xs font-semibold uppercase tracking-wider text-muted-foreground h-10 px-1 select-none overflow-hidden"
       {...attributes} {...listeners}>
-      <span className="flex items-center gap-1.5">
+      <span className="flex items-center gap-1.5 truncate">
         <GripVertical className="w-3 h-3 opacity-30 rotate-90 shrink-0" />
-        {col.label}
+        <span className="truncate">{col.label}</span>
         {col.isCustom && col.colType && col.colType !== "text" && (
-          <span className="opacity-40">{TYPE_ICONS[col.colType]}</span>
+          <span className="opacity-40 shrink-0">{TYPE_ICONS[col.colType]}</span>
         )}
+      </span>
+      {/* Resize handle */}
+      <span
+        onPointerDown={startResize}
+        onClick={e => e.stopPropagation()}
+        className="absolute top-0 right-0 h-full w-2 cursor-col-resize z-20 group/resize flex justify-center"
+        style={{ touchAction: "none" }}
+      >
+        <span className="w-px h-full bg-border/0 group-hover/resize:bg-primary/60 transition-colors" />
       </span>
     </TableHead>
   );
@@ -731,6 +773,7 @@ export default function Leads() {
   const [columnOrder,   setColumnOrder]   = useState<string[]>(BUILTIN_COLUMNS.map(c => c.key));
   const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(new Set());
   const [rowOrder,      setRowOrder]      = useState<number[]>([]);
+  const [columnWidths,  setColumnWidths]  = useState<Record<string, number>>({});
   const prefsReady = useRef(false);
   const tableScrollRef = useRef<HTMLDivElement>(null);
 
@@ -775,6 +818,7 @@ export default function Leads() {
     if (savedPrefs.columnOrder?.length) setColumnOrder(savedPrefs.columnOrder);
     if (savedPrefs.hiddenColumns)       setHiddenColumns(new Set(savedPrefs.hiddenColumns));
     if (savedPrefs.rowOrder)            setRowOrder(savedPrefs.rowOrder);
+    if (savedPrefs.columnWidths)        setColumnWidths(savedPrefs.columnWidths);
   }, [savedPrefs]);
 
   // When new custom columns arrive, add them to columnOrder if missing
@@ -800,7 +844,19 @@ export default function Leads() {
   // ── Prefs save ────────────────────────────────────────────────────────────
 
   const savePrefs = useCallback((patch: Partial<LeadsPrefs>) => {
-    api.savePrefs({ columnOrder, hiddenColumns: [...hiddenColumns], rowOrder, ...patch }).catch(() => {});
+    api.savePrefs({ columnOrder, hiddenColumns: [...hiddenColumns], rowOrder, columnWidths, ...patch }).catch(() => {});
+  }, [columnOrder, hiddenColumns, rowOrder, columnWidths]);
+
+  const handleColResize = useCallback((key: string, width: number) => {
+    setColumnWidths(prev => ({ ...prev, [key]: width }));
+  }, []);
+
+  const handleColResizeEnd = useCallback((key: string, width: number) => {
+    setColumnWidths(prev => {
+      const next = { ...prev, [key]: width };
+      api.savePrefs({ columnOrder, hiddenColumns: [...hiddenColumns], rowOrder, columnWidths: next }).catch(() => {});
+      return next;
+    });
   }, [columnOrder, hiddenColumns, rowOrder]);
 
   // ── Mutations ─────────────────────────────────────────────────────────────
