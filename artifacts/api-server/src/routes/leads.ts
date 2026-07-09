@@ -5,6 +5,9 @@ import { requireAuth } from "../lib/auth";
 
 const router = Router();
 
+// Columns whose primary DB field should stay in sync with multiValues[key][0]
+const MULTI_SYNC_COLS = new Set(["contact", "email", "businessName", "businessOwner", "service", "response"]);
+
 // GET /api/leads/stats
 router.get("/leads/stats", requireAuth, async (req, res) => {
   try {
@@ -65,7 +68,20 @@ router.get("/leads", requireAuth, async (req, res) => {
 // POST /api/leads
 router.post("/leads", requireAuth, async (req, res) => {
   try {
-    const { contact, email, businessOwner, businessName, service, response, followUp, leadValue, leadAssignee, status } = req.body;
+    const {
+      contact, email, businessOwner, businessName, service, response,
+      followUp, leadValue, leadAssignee, status, multiValues,
+    } = req.body;
+
+    // Build initial multiValues — bootstrap from primary columns if not provided
+    const mv: Record<string, string[]> = typeof multiValues === "object" && multiValues ? { ...multiValues } : {};
+    if (contact  && !mv.contact)      mv.contact      = [contact];
+    if (email    && !mv.email)        mv.email        = [email];
+    if (businessName  && !mv.businessName)  mv.businessName  = [businessName];
+    if (businessOwner && !mv.businessOwner) mv.businessOwner = [businessOwner];
+    if (service  && !mv.service)      mv.service      = [service];
+    if (response && !mv.response)     mv.response     = [response];
+
     const [lead] = await db
       .insert(leadsTable)
       .values({
@@ -74,6 +90,7 @@ router.post("/leads", requireAuth, async (req, res) => {
         leadAssignee,
         status: status ?? "pending",
         ownerId: req.session.userId,
+        multiValues: mv,
       })
       .returning();
     res.status(201).json(lead);
@@ -94,6 +111,24 @@ router.patch("/leads/:id", requireAuth, async (req, res) => {
     // Merge custom_data patch (if provided) with existing JSONB
     if (req.body.customData && typeof req.body.customData === "object") {
       updates.customData = sql`custom_data || ${JSON.stringify(req.body.customData)}::jsonb`;
+    }
+
+    // Merge multi_values patch — also sync primary columns
+    if (req.body.multiValues && typeof req.body.multiValues === "object") {
+      const mv = req.body.multiValues as Record<string, string[]>;
+      // Merge the new arrays into the existing JSONB
+      updates.multiValues = sql`COALESCE(multi_values, '{}') || ${JSON.stringify(mv)}::jsonb`;
+      // Sync primary columns to first value of each updated key
+      for (const [key, vals] of Object.entries(mv)) {
+        if (MULTI_SYNC_COLS.has(key)) {
+          // Convert camelCase keys to the Drizzle field names used in updates
+          const fieldMap: Record<string, string> = {
+            businessName: "businessName",
+            businessOwner: "businessOwner",
+          };
+          updates[fieldMap[key] ?? key] = (Array.isArray(vals) && vals[0]) ? vals[0] : null;
+        }
+      }
     }
 
     const [lead] = await db.update(leadsTable).set(updates as any).where(eq(leadsTable.id, id)).returning();

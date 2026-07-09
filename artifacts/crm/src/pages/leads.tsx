@@ -43,6 +43,7 @@ interface LeadRecord {
   leadAssignee: string | null;
   status: string;
   customData: Record<string, string | number | null>;
+  multiValues: Record<string, string[]>;
   createdAt: string;
 }
 
@@ -89,6 +90,17 @@ const BUILTIN_COLUMNS: ColumnDef[] = [
 ];
 
 const STATUS_OPTIONS = ["pending", "contacted", "paid"];
+
+// Columns that support storing multiple values per cell
+const MULTI_VALUE_COLS = new Set(["contact", "email", "businessName", "businessOwner", "service", "response"]);
+
+/** Get all values for a multi-value column — merges multiValues array + primary column */
+function getLeadMultiValues(lead: LeadRecord, colKey: string): string[] {
+  const mv = lead.multiValues?.[colKey];
+  if (Array.isArray(mv) && mv.length > 0) return mv;
+  const primary = (lead as any)[colKey];
+  return primary ? [primary] : [];
+}
 
 const TYPE_ICONS: Record<ColType, React.ReactNode> = {
   text:   <Type     className="w-3 h-3" />,
@@ -187,6 +199,130 @@ function CellEditor({ colKey, colType, inputType: inputTypeProp, value, onSave, 
   );
 }
 
+// ─── Multi-Value Cell ────────────────────────────────────────────────────────
+
+function MultiValueCell({ values, colKey, inputType, onUpdate }: {
+  values: string[];
+  colKey: string;
+  inputType?: string;
+  onUpdate: (vals: string[]) => void;
+}) {
+  const [open,    setOpen]    = useState(false);
+  const [draft,   setDraft]   = useState("");
+  const [editIdx, setEditIdx] = useState<number | null>(null);
+  const [editVal, setEditVal] = useState("");
+  const addRef = useRef<HTMLInputElement>(null);
+
+  const addValue = () => {
+    const v = draft.trim();
+    if (!v) return;
+    onUpdate([...values, v]);
+    setDraft("");
+    setTimeout(() => addRef.current?.focus(), 0);
+  };
+
+  const removeValue = (i: number) => onUpdate(values.filter((_, idx) => idx !== i));
+
+  const startEdit = (i: number) => { setEditIdx(i); setEditVal(values[i]); };
+  const commitEdit = () => {
+    if (editIdx === null) return;
+    const v = editVal.trim();
+    onUpdate(v ? values.map((val, i) => i === editIdx ? v : val) : values.filter((_, i) => i !== editIdx));
+    setEditIdx(null);
+  };
+
+  const SHOW = 2;
+  const itype = inputType ?? "text";
+
+  return (
+    <Popover open={open} onOpenChange={o => { setOpen(o); if (!o) { setEditIdx(null); setDraft(""); } }}>
+      <PopoverTrigger asChild>
+        {/* Trigger area — shows chips inline */}
+        <div
+          className="flex items-center flex-wrap gap-0.5 min-h-[22px] rounded px-0.5 cursor-pointer group hover:bg-muted/40 transition-colors"
+          onClick={() => setOpen(true)}
+          title="Click to manage values"
+        >
+          {values.length === 0 && (
+            <span className="text-xs text-muted-foreground/30 italic select-none">—</span>
+          )}
+          {values.slice(0, SHOW).map((v, i) => (
+            <span key={i}
+              className="inline-flex items-center bg-muted/70 border border-border/60 rounded-sm text-xs px-1.5 py-0 max-w-[100px] shrink-0">
+              <span className="truncate">{v}</span>
+            </span>
+          ))}
+          {values.length > SHOW && (
+            <span className="text-[10px] font-semibold text-muted-foreground bg-muted/60 border border-border/40 rounded-sm px-1">
+              +{values.length - SHOW}
+            </span>
+          )}
+          <Plus className="w-3 h-3 ml-auto opacity-0 group-hover:opacity-50 transition-opacity shrink-0" />
+        </div>
+      </PopoverTrigger>
+
+      <PopoverContent className="w-64 p-3 shadow-xl" align="start" side="bottom"
+        onOpenAutoFocus={e => { e.preventDefault(); setTimeout(() => addRef.current?.focus(), 50); }}>
+        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+          {colKey === "contact" ? "Phone numbers" : colKey === "email" ? "Email addresses" : "Values"}
+        </p>
+
+        {/* Existing values */}
+        <div className="space-y-1 mb-2 max-h-52 overflow-y-auto">
+          {values.length === 0 && (
+            <p className="text-xs text-muted-foreground/60 text-center py-3 italic">No values yet — add one below</p>
+          )}
+          {values.map((v, i) => (
+            <div key={i} className="flex items-center gap-1.5 group/item rounded hover:bg-muted/30 px-1 py-0.5">
+              {editIdx === i ? (
+                <input autoFocus type={itype} value={editVal}
+                  className="flex-1 text-xs border border-primary/50 rounded px-1.5 py-0.5 bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+                  onChange={e => setEditVal(e.target.value)}
+                  onBlur={commitEdit}
+                  onKeyDown={e => { if (e.key === "Enter") commitEdit(); if (e.key === "Escape") setEditIdx(null); e.stopPropagation(); }}
+                />
+              ) : (
+                <>
+                  {i === 0 && (
+                    <span className="text-[9px] font-bold text-primary/60 uppercase tracking-wider shrink-0">primary</span>
+                  )}
+                  <span className="flex-1 text-xs truncate cursor-pointer hover:text-primary transition-colors"
+                    onClick={() => startEdit(i)} title="Click to edit">
+                    {v}
+                  </span>
+                  <button onClick={() => removeValue(i)}
+                    className="p-0.5 rounded text-muted-foreground/30 hover:text-destructive transition-colors opacity-0 group-hover/item:opacity-100 shrink-0">
+                    <X className="w-3 h-3" />
+                  </button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Add new value */}
+        <div className="flex gap-1.5 border-t border-border/40 pt-2">
+          <input ref={addRef} type={itype}
+            placeholder={`Add ${colKey === "contact" ? "phone" : colKey === "email" ? "email" : "value"}…`}
+            value={draft}
+            className="flex-1 text-xs border border-border rounded px-2 py-1 bg-background focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground/40"
+            onChange={e => setDraft(e.target.value)}
+            onKeyDown={e => {
+              e.stopPropagation();
+              if (e.key === "Enter") { e.preventDefault(); addValue(); }
+              if (e.key === "Escape") setOpen(false);
+            }}
+          />
+          <button onClick={addValue} disabled={!draft.trim()}
+            className="px-2.5 py-1 text-xs bg-primary text-primary-foreground rounded disabled:opacity-30 hover:bg-primary/90 transition-all">
+            Add
+          </button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 // ─── Sortable Column Header ───────────────────────────────────────────────────
 
 function SortableColHeader({ col }: { col: ColumnDef }) {
@@ -216,10 +352,11 @@ interface RowProps {
   onCellDoubleClick: (rowId: number, colKey: string, val: string) => void;
   onCellSave: (rowId: number, col: ColumnDef, val: string) => void;
   onCellCancel: () => void;
+  onMultiValueUpdate: (rowId: number, colKey: string, vals: string[]) => void;
   onDelete: (id: number) => void; isDeleting: boolean;
 }
 
-function SortableLeadRow({ lead, index, visibleCols, editingCell, highlighted, onCellDoubleClick, onCellSave, onCellCancel, onDelete, isDeleting }: RowProps) {
+function SortableLeadRow({ lead, index, visibleCols, editingCell, highlighted, onCellDoubleClick, onCellSave, onCellCancel, onMultiValueUpdate, onDelete, isDeleting }: RowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: lead.id });
   const baseClass = lead.status === "paid" ? "bg-green-50/60 dark:bg-green-900/10" : index % 2 === 1 ? "bg-muted/10" : "";
 
@@ -236,12 +373,27 @@ function SortableLeadRow({ lead, index, visibleCols, editingCell, highlighted, o
       </TableCell>
 
       {visibleCols.map(col => {
-        const isEditing = editingCell?.rowId === lead.id && editingCell?.colKey === col.key;
-        const rawVal = col.isCustom
-          ? (lead.customData?.[col.fieldKey!] ?? "")
-          : (lead as any)[col.key];
+        const isEditing  = editingCell?.rowId === lead.id && editingCell?.colKey === col.key;
+        const isMulti    = !col.isCustom && MULTI_VALUE_COLS.has(col.key);
+        const rawVal     = col.isCustom ? (lead.customData?.[col.fieldKey!] ?? "") : (lead as any)[col.key];
         const displayStr = rawVal == null ? "" : String(rawVal);
 
+        // ── Multi-value cell ─────────────────────────────────────────────────
+        if (isMulti) {
+          return (
+            <TableCell key={col.key}
+              className="px-1 py-1 border-r border-border/30 last:border-r-0 max-w-[180px]">
+              <MultiValueCell
+                values={getLeadMultiValues(lead, col.key)}
+                colKey={col.key}
+                inputType={col.inputType}
+                onUpdate={vals => onMultiValueUpdate(lead.id, col.key, vals)}
+              />
+            </TableCell>
+          );
+        }
+
+        // ── Regular / single-value cell ──────────────────────────────────────
         return (
           <TableCell key={col.key}
             className="px-1 py-1.5 text-sm border-r border-border/30 last:border-r-0 max-w-[160px]"
@@ -729,6 +881,18 @@ export default function Leads() {
       ? { customData: { [col.fieldKey!]: parsed } } as any
       : { [col.key]: parsed } as any;
     patchMut.mutate({ id: rowId, data });
+  };
+
+  const handleMultiValueUpdate = (rowId: number, colKey: string, vals: string[]) => {
+    // Optimistic update in cache
+    qc.setQueryData(["leads", search], (old: LeadRecord[] | undefined) =>
+      old?.map(l => l.id !== rowId ? l : {
+        ...l,
+        multiValues: { ...l.multiValues, [colKey]: vals },
+        [colKey]: vals[0] ?? null,  // keep primary column in sync
+      })
+    );
+    patchMut.mutate({ id: rowId, data: { multiValues: { [colKey]: vals } } as any });
   };
 
   // ─── Render ───────────────────────────────────────────────────────────────
