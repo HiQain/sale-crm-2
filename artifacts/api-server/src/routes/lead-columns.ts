@@ -11,6 +11,12 @@ function toFieldKey(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
 }
 
+const VALID_TYPES = ["text", "number", "date"] as const;
+type ColType = typeof VALID_TYPES[number];
+function sanitizeType(t: unknown): ColType {
+  return VALID_TYPES.includes(t as ColType) ? (t as ColType) : "text";
+}
+
 // GET /api/leads/columns
 router.get("/leads/columns", requireAuth, async (req, res) => {
   try {
@@ -32,7 +38,7 @@ router.post("/leads/columns", requireAuth, async (req, res) => {
     return;
   }
   try {
-    const { name } = req.body as { name: string };
+    const { name, type } = req.body as { name: string; type?: string };
     if (!name?.trim()) {
       res.status(400).json({ error: "name is required" });
       return;
@@ -55,7 +61,12 @@ router.post("/leads/columns", requireAuth, async (req, res) => {
 
     const [col] = await db
       .insert(leadCustomColumnsTable)
-      .values({ name: name.trim(), fieldKey: candidate, position: (maxPos?.max ?? 0) + 1 })
+      .values({
+        name: name.trim(),
+        fieldKey: candidate,
+        position: (maxPos?.max ?? 0) + 1,
+        type: sanitizeType(type),
+      })
       .returning();
     res.status(201).json(col);
   } catch (err) {
@@ -64,7 +75,7 @@ router.post("/leads/columns", requireAuth, async (req, res) => {
   }
 });
 
-// PATCH /api/leads/columns/:id  – rename
+// PATCH /api/leads/columns/:id  – rename / retype
 router.patch("/leads/columns/:id", requireAuth, async (req, res) => {
   if (req.session.role !== "admin") {
     res.status(403).json({ error: "Admins only" });
@@ -72,17 +83,23 @@ router.patch("/leads/columns/:id", requireAuth, async (req, res) => {
   }
   try {
     const id = parseInt(req.params["id"] as string);
-    const { name } = req.body as { name: string };
-    if (!name?.trim()) { res.status(400).json({ error: "name is required" }); return; }
+    const { name, type } = req.body as { name?: string; type?: string };
+    const patch: { name?: string; type?: ColType } = {};
+    if (name?.trim()) patch.name = name.trim();
+    if (type)         patch.type = sanitizeType(type);
+    if (!Object.keys(patch).length) {
+      res.status(400).json({ error: "name or type is required" });
+      return;
+    }
     const [col] = await db
       .update(leadCustomColumnsTable)
-      .set({ name: name.trim() })
+      .set(patch)
       .where(eq(leadCustomColumnsTable.id, id))
       .returning();
     if (!col) { res.status(404).json({ error: "Not found" }); return; }
     res.json(col);
   } catch (err) {
-    req.log.error({ err }, "Rename lead column error");
+    req.log.error({ err }, "Update lead column error");
     res.status(500).json({ error: "Internal server error" });
   }
 });

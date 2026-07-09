@@ -22,10 +22,13 @@ import { Label } from "@/components/ui/label";
 import {
   LayoutGrid, Clock, CheckCircle2, DollarSign, TrendingUp,
   Search, Trash2, Columns, GripVertical, Plus, Pencil, Check, X, Settings2,
+  Type, Hash, Calendar,
 } from "lucide-react";
 import React from "react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+type ColType = "text" | "number" | "date";
 
 interface LeadRecord {
   id: number;
@@ -57,14 +60,16 @@ interface CustomColRecord {
   name: string;
   fieldKey: string;
   position: number;
+  type: ColType;
 }
 
 interface ColumnDef {
-  key: string;           // used in prefs / drag IDs
+  key: string;
   label: string;
   isCustom?: boolean;
-  fieldKey?: string;     // customData key for custom columns
-  customId?: number;     // DB id for custom columns
+  fieldKey?: string;
+  customId?: number;
+  colType?: ColType;    // "text" | "number" | "date"
 }
 
 // ─── Built-in columns ────────────────────────────────────────────────────────
@@ -77,12 +82,19 @@ const BUILTIN_COLUMNS: ColumnDef[] = [
   { key: "service",       label: "Service" },
   { key: "response",      label: "Response" },
   { key: "followUp",      label: "Follow Up" },
-  { key: "leadValue",     label: "Lead Value" },
+  { key: "leadValue",     label: "Lead Value",  colType: "number" },
   { key: "leadAssignee",  label: "Lead" },
   { key: "status",        label: "Status" },
 ];
 
 const STATUS_OPTIONS = ["pending", "contacted", "paid"];
+
+const TYPE_ICONS: Record<ColType, React.ReactNode> = {
+  text:   <Type     className="w-3 h-3" />,
+  number: <Hash     className="w-3 h-3" />,
+  date:   <Calendar className="w-3 h-3" />,
+};
+const TYPE_LABELS: Record<ColType, string> = { text: "Text", number: "Number", date: "Date" };
 
 // ─── API helpers ──────────────────────────────────────────────────────────────
 
@@ -99,21 +111,24 @@ const api = {
     fetch(`/api/leads/${id}`, { method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
   deleteLead: (id: number) =>
     fetch(`/api/leads/${id}`, { method: "DELETE", credentials: "include" }),
-  createLead: (data: Partial<LeadRecord>) =>
+  createLead: (data: Partial<LeadRecord>): Promise<LeadRecord> =>
     fetch("/api/leads", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
   fetchCustomCols: (): Promise<CustomColRecord[]> =>
     fetch("/api/leads/columns", { credentials: "include" }).then(r => r.json()),
-  createCustomCol: (name: string): Promise<CustomColRecord> =>
-    fetch("/api/leads/columns", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) }).then(r => r.json()),
-  renameCustomCol: (id: number, name: string) =>
-    fetch(`/api/leads/columns/${id}`, { method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) }).then(r => r.json()),
+  createCustomCol: (name: string, type: ColType): Promise<CustomColRecord> =>
+    fetch("/api/leads/columns", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, type }) }).then(r => r.json()),
+  updateCustomCol: (id: number, patch: { name?: string; type?: ColType }) =>
+    fetch(`/api/leads/columns/${id}`, { method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) }).then(r => r.json()),
   deleteCustomCol: (id: number) =>
     fetch(`/api/leads/columns/${id}`, { method: "DELETE", credentials: "include" }),
 };
 
 // ─── Inline Cell Editor ───────────────────────────────────────────────────────
 
-function CellEditor({ colKey, value, onSave, onCancel }: { colKey: string; value: string; onSave: (v: string) => void; onCancel: () => void }) {
+function CellEditor({ colKey, colType, value, onSave, onCancel }: {
+  colKey: string; colType?: ColType; value: string;
+  onSave: (v: string) => void; onCancel: () => void;
+}) {
   const [val, setVal] = useState(value);
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => { ref.current?.focus(); ref.current?.select(); }, []);
@@ -123,20 +138,22 @@ function CellEditor({ colKey, value, onSave, onCancel }: { colKey: string; value
     if (e.key === "Escape") { e.preventDefault(); onCancel(); }
     e.stopPropagation();
   };
+
   if (colKey === "status") {
     return (
       <select autoFocus value={val}
         className="w-full text-xs font-bold uppercase border border-primary/40 rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary px-1.5 py-0.5 cursor-pointer"
         onChange={e => { setVal(e.target.value); onSave(e.target.value); }}
         onBlur={commit}
-        onKeyDown={e => { if (e.key === "Escape") onCancel(); e.stopPropagation(); }}
-      >
+        onKeyDown={e => { if (e.key === "Escape") onCancel(); e.stopPropagation(); }}>
         {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
       </select>
     );
   }
+
+  const inputType = colType ?? (colKey === "leadValue" ? "number" : "text");
   return (
-    <input ref={ref} type={colKey === "leadValue" ? "number" : "text"} value={val}
+    <input ref={ref} type={inputType} value={val}
       className="w-full min-w-[80px] text-sm border border-primary/40 rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary px-1.5 py-0.5"
       onChange={e => setVal(e.target.value)} onBlur={commit} onKeyDown={onKey}
     />
@@ -151,11 +168,13 @@ function SortableColHeader({ col }: { col: ColumnDef }) {
     <TableHead ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1, cursor: isDragging ? "grabbing" : "grab", userSelect: "none", position: "relative", whiteSpace: "nowrap" }}
       className="text-xs font-semibold uppercase tracking-wider text-muted-foreground h-10 px-1 select-none"
-      {...attributes} {...listeners}
-    >
-      <span className="flex items-center gap-1">
+      {...attributes} {...listeners}>
+      <span className="flex items-center gap-1.5">
         <GripVertical className="w-3 h-3 opacity-30 rotate-90 shrink-0" />
         {col.label}
+        {col.isCustom && col.colType && col.colType !== "text" && (
+          <span className="opacity-40">{TYPE_ICONS[col.colType]}</span>
+        )}
       </span>
     </TableHead>
   );
@@ -166,21 +185,22 @@ function SortableColHeader({ col }: { col: ColumnDef }) {
 interface RowProps {
   lead: LeadRecord; index: number; visibleCols: ColumnDef[];
   editingCell: { rowId: number; colKey: string } | null;
+  highlighted: boolean;
   onCellDoubleClick: (rowId: number, colKey: string, val: string) => void;
   onCellSave: (rowId: number, col: ColumnDef, val: string) => void;
   onCellCancel: () => void;
   onDelete: (id: number) => void; isDeleting: boolean;
 }
 
-function SortableLeadRow({ lead, index, visibleCols, editingCell, onCellDoubleClick, onCellSave, onCellCancel, onDelete, isDeleting }: RowProps) {
+function SortableLeadRow({ lead, index, visibleCols, editingCell, highlighted, onCellDoubleClick, onCellSave, onCellCancel, onDelete, isDeleting }: RowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: lead.id });
-  const rowClass = lead.status === "paid" ? "bg-green-50/60 dark:bg-green-900/10" : index % 2 === 1 ? "bg-muted/10" : "";
+  const baseClass = lead.status === "paid" ? "bg-green-50/60 dark:bg-green-900/10" : index % 2 === 1 ? "bg-muted/10" : "";
 
   return (
     <TableRow ref={setNodeRef}
+      data-lead-id={lead.id}
       style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1, position: "relative" }}
-      className={rowClass}
-    >
+      className={`${baseClass} ${highlighted ? "row-flash" : ""}`}>
       <TableCell className="w-6 px-0.5 py-2 text-center">
         <button className="cursor-grab active:cursor-grabbing p-1 rounded hover:bg-muted/60 text-muted-foreground transition-colors"
           {...attributes} {...listeners} tabIndex={-1}>
@@ -199,15 +219,18 @@ function SortableLeadRow({ lead, index, visibleCols, editingCell, onCellDoubleCl
           <TableCell key={col.key}
             className="px-1 py-1.5 text-sm border-r border-border/30 last:border-r-0 max-w-[160px]"
             onDoubleClick={() => !isEditing && onCellDoubleClick(lead.id, col.key, displayStr)}
-            title="Double-click to edit"
-          >
+            title="Double-click to edit">
             {isEditing ? (
-              <CellEditor colKey={col.key} value={displayStr}
+              <CellEditor colKey={col.key} colType={col.colType} value={displayStr}
                 onSave={v => onCellSave(lead.id, col, v)} onCancel={onCellCancel} />
             ) : col.key === "status" ? (
               <LeadStatusBadge status={lead.status} />
             ) : col.key === "leadValue" ? (
               <span className="font-medium">{formatCurrency(lead.leadValue)}</span>
+            ) : col.colType === "number" && rawVal !== "" && rawVal != null ? (
+              <span className="font-medium tabular-nums">{Number(rawVal).toLocaleString()}</span>
+            ) : col.colType === "date" && displayStr ? (
+              <span>{new Date(displayStr).toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "2-digit" })}</span>
             ) : (
               <span className="truncate block">{displayStr}</span>
             )}
@@ -226,17 +249,22 @@ function SortableLeadRow({ lead, index, visibleCols, editingCell, onCellDoubleCl
 
 // ─── New Row (inline) ─────────────────────────────────────────────────────────
 
-function NewLeadRow({ visibleCols, onSave, onCancel }: { visibleCols: ColumnDef[]; onSave: (d: Partial<LeadRecord>) => void; onCancel: () => void }) {
+function NewLeadRow({ visibleCols, onSave, onCancel }: {
+  visibleCols: ColumnDef[];
+  onSave: (d: Partial<LeadRecord>) => void;
+  onCancel: () => void;
+}) {
   const [data, setData] = useState<Record<string, string>>({ status: "pending", leadValue: "0" });
   const firstRef = useRef<HTMLInputElement>(null);
   useEffect(() => { firstRef.current?.focus(); }, []);
 
   const commit = () => {
     const payload: any = { ...data };
-    // separate customData from regular fields
     const builtinKeys = new Set(BUILTIN_COLUMNS.map(c => c.key));
     const customData: Record<string, string> = {};
-    Object.keys(payload).forEach(k => { if (!builtinKeys.has(k)) { customData[k] = payload[k]; delete payload[k]; } });
+    Object.keys(payload).forEach(k => {
+      if (!builtinKeys.has(k)) { customData[k] = payload[k]; delete payload[k]; }
+    });
     if (Object.keys(customData).length) payload.customData = customData;
     if (data.leadValue !== undefined) payload.leadValue = parseFloat(data.leadValue) || 0;
     onSave(payload);
@@ -250,29 +278,34 @@ function NewLeadRow({ visibleCols, onSave, onCancel }: { visibleCols: ColumnDef[
   };
 
   return (
-    <TableRow className="bg-primary/5 border border-primary/20">
+    <TableRow className="bg-primary/5 border-y border-primary/30">
       <TableCell className="w-6 px-0.5 py-1.5" />
-      {visibleCols.map((col, idx) => (
-        <TableCell key={col.key} className="px-1 py-1 border-r border-border/30 last:border-r-0">
-          {col.key === "status" ? (
-            <select value={data[col.key] ?? "pending"}
-              className="w-full text-xs font-bold uppercase border border-border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary px-1.5 py-0.5 cursor-pointer"
-              onChange={e => setData(d => ({ ...d, [col.key]: e.target.value }))}
-              onKeyDown={e => onKey(e, idx)}>
-              {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-          ) : (
-            <input ref={idx === 0 ? firstRef : undefined}
-              type={col.key === "leadValue" ? "number" : "text"}
-              placeholder={col.label}
-              value={data[col.isCustom ? col.fieldKey! : col.key] ?? ""}
-              className="w-full min-w-[60px] text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary px-1.5 py-0.5 placeholder:text-muted-foreground/50"
-              onChange={e => setData(d => ({ ...d, [col.isCustom ? col.fieldKey! : col.key]: e.target.value }))}
-              onKeyDown={e => onKey(e, idx)}
-            />
-          )}
-        </TableCell>
-      ))}
+      {visibleCols.map((col, idx) => {
+        const fieldId = col.isCustom ? col.fieldKey! : col.key;
+        const inputType = col.colType ?? (col.key === "leadValue" ? "number" : "text");
+        return (
+          <TableCell key={col.key} className="px-1 py-1 border-r border-border/30 last:border-r-0">
+            {col.key === "status" ? (
+              <select value={data[fieldId] ?? "pending"}
+                className="w-full text-xs font-bold uppercase border border-border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary px-1.5 py-0.5 cursor-pointer"
+                onChange={e => setData(d => ({ ...d, [fieldId]: e.target.value }))}
+                onKeyDown={e => onKey(e, idx)}>
+                {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            ) : (
+              <input
+                ref={idx === 0 ? firstRef : undefined}
+                type={inputType}
+                placeholder={col.label}
+                value={data[fieldId] ?? ""}
+                className="w-full min-w-[60px] text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary px-1.5 py-0.5 placeholder:text-muted-foreground/50"
+                onChange={e => setData(d => ({ ...d, [fieldId]: e.target.value }))}
+                onKeyDown={e => onKey(e, idx)}
+              />
+            )}
+          </TableCell>
+        );
+      })}
       <TableCell className="px-1 py-1 text-right w-8">
         <button className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors" onClick={onCancel} title="Cancel">
           <X className="w-3.5 h-3.5" />
@@ -286,8 +319,10 @@ function NewLeadRow({ visibleCols, onSave, onCancel }: { visibleCols: ColumnDef[
 
 function ManageColumnsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [newName, setNewName] = useState("");
+  const [newType, setNewType] = useState<ColType>("text");
   const [editId,  setEditId]  = useState<number | null>(null);
   const [editVal, setEditVal] = useState("");
+  const [editType, setEditType] = useState<ColType>("text");
   const { toast } = useToast();
   const qc = useQueryClient();
 
@@ -297,23 +332,24 @@ function ManageColumnsDialog({ open, onClose }: { open: boolean; onClose: () => 
   });
 
   const createMut = useMutation({
-    mutationFn: (name: string) => api.createCustomCol(name),
+    mutationFn: ({ name, type }: { name: string; type: ColType }) => api.createCustomCol(name, type),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["lead-custom-cols"] });
-      setNewName("");
+      setNewName(""); setNewType("text");
       toast({ title: "Column added" });
     },
     onError: () => toast({ title: "Failed to add column", variant: "destructive" }),
   });
 
-  const renameMut = useMutation({
-    mutationFn: ({ id, name }: { id: number; name: string }) => api.renameCustomCol(id, name),
+  const updateMut = useMutation({
+    mutationFn: ({ id, patch }: { id: number; patch: { name?: string; type?: ColType } }) =>
+      api.updateCustomCol(id, patch),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["lead-custom-cols"] });
       setEditId(null);
-      toast({ title: "Column renamed" });
+      toast({ title: "Column updated" });
     },
-    onError: () => toast({ title: "Failed to rename column", variant: "destructive" }),
+    onError: () => toast({ title: "Failed to update column", variant: "destructive" }),
   });
 
   const deleteMut = useMutation({
@@ -325,29 +361,39 @@ function ManageColumnsDialog({ open, onClose }: { open: boolean; onClose: () => 
     onError: () => toast({ title: "Failed to delete column", variant: "destructive" }),
   });
 
-  const startEdit = (col: CustomColRecord) => { setEditId(col.id); setEditVal(col.name); };
-  const commitRename = (id: number) => {
-    if (editVal.trim()) renameMut.mutate({ id, name: editVal.trim() });
-    else setEditId(null);
+  const startEdit = (col: CustomColRecord) => {
+    setEditId(col.id); setEditVal(col.name); setEditType(col.type ?? "text");
+  };
+  const commitUpdate = (id: number) => {
+    if (!editVal.trim()) { setEditId(null); return; }
+    updateMut.mutate({ id, patch: { name: editVal.trim(), type: editType } });
+  };
+
+  const handleCreate = () => {
+    if (!newName.trim()) return;
+    createMut.mutate({ name: newName.trim(), type: newType });
   };
 
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
-      <DialogContent className="sm:max-w-[420px]">
+      <DialogContent className="sm:max-w-[460px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Settings2 className="w-4 h-4" /> Manage Columns
           </DialogTitle>
         </DialogHeader>
 
-        {/* Built-in columns (read-only) */}
+        {/* Built-in columns */}
         <div className="space-y-1">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Built-in</p>
-          <div className="space-y-0.5 max-h-40 overflow-y-auto pr-1">
+          <div className="space-y-0.5 max-h-36 overflow-y-auto pr-1">
             {BUILTIN_COLUMNS.map(col => (
               <div key={col.key} className="flex items-center justify-between px-2 py-1.5 rounded-md bg-muted/30">
                 <span className="text-sm text-muted-foreground">{col.label}</span>
-                <span className="text-xs text-muted-foreground/50">built-in</span>
+                <span className="text-xs text-muted-foreground/50 flex items-center gap-1">
+                  {col.colType && TYPE_ICONS[col.colType]}
+                  built-in
+                </span>
               </div>
             ))}
           </div>
@@ -364,9 +410,17 @@ function ManageColumnsDialog({ open, onClose }: { open: boolean; onClose: () => 
                     <input autoFocus value={editVal}
                       className="flex-1 text-sm border border-primary/40 rounded px-2 py-0.5 bg-background focus:outline-none focus:ring-1 focus:ring-primary"
                       onChange={e => setEditVal(e.target.value)}
-                      onKeyDown={e => { if (e.key === "Enter") commitRename(col.id); if (e.key === "Escape") setEditId(null); }}
+                      onKeyDown={e => { if (e.key === "Enter") commitUpdate(col.id); if (e.key === "Escape") setEditId(null); }}
                     />
-                    <button onClick={() => commitRename(col.id)} className="p-1 text-green-600 hover:bg-green-50 rounded" title="Save">
+                    {/* Type selector in edit mode */}
+                    <select value={editType}
+                      className="text-xs border border-border rounded px-1.5 py-0.5 bg-background focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                      onChange={e => setEditType(e.target.value as ColType)}>
+                      <option value="text">Text</option>
+                      <option value="number">Number</option>
+                      <option value="date">Date</option>
+                    </select>
+                    <button onClick={() => commitUpdate(col.id)} className="p-1 text-green-600 hover:bg-green-50 rounded" title="Save">
                       <Check className="w-3.5 h-3.5" />
                     </button>
                     <button onClick={() => setEditId(null)} className="p-1 text-muted-foreground hover:bg-muted rounded" title="Cancel">
@@ -376,8 +430,12 @@ function ManageColumnsDialog({ open, onClose }: { open: boolean; onClose: () => 
                 ) : (
                   <>
                     <span className="flex-1 text-sm font-medium">{col.name}</span>
-                    <span className="text-xs text-muted-foreground/50 font-mono">{col.fieldKey}</span>
-                    <button onClick={() => startEdit(col)} className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted rounded opacity-0 group-hover:opacity-100 transition-opacity" title="Rename">
+                    {/* Type badge */}
+                    <span className="flex items-center gap-1 text-xs text-muted-foreground/60 border border-border/50 rounded px-1.5 py-0.5 bg-muted/20">
+                      {TYPE_ICONS[col.type ?? "text"]}
+                      {TYPE_LABELS[col.type ?? "text"]}
+                    </span>
+                    <button onClick={() => startEdit(col)} className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted rounded opacity-0 group-hover:opacity-100 transition-opacity" title="Edit">
                       <Pencil className="w-3.5 h-3.5" />
                     </button>
                     <button onClick={() => { if (confirm(`Delete column "${col.name}"? This removes its data from all leads.`)) deleteMut.mutate(col.id); }}
@@ -391,15 +449,33 @@ function ManageColumnsDialog({ open, onClose }: { open: boolean; onClose: () => 
           </div>
 
           {/* Add new column */}
-          <div className="flex gap-2 pt-2">
-            <Input placeholder="New column name…" value={newName} className="h-8 text-sm"
-              onChange={e => setNewName(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter" && newName.trim()) createMut.mutate(newName.trim()); }}
-            />
-            <Button size="sm" className="h-8 shrink-0" disabled={!newName.trim() || createMut.isPending}
-              onClick={() => newName.trim() && createMut.mutate(newName.trim())}>
-              <Plus className="w-3.5 h-3.5 mr-1" /> Add
-            </Button>
+          <div className="pt-3 space-y-2">
+            <p className="text-xs text-muted-foreground font-medium">Add new column</p>
+            <div className="flex gap-2">
+              <Input
+                placeholder="Column name…"
+                value={newName}
+                className="h-8 text-sm flex-1"
+                onChange={e => setNewName(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") handleCreate(); }}
+              />
+              {/* Type selector */}
+              <select value={newType}
+                className="h-8 text-xs border border-border rounded-md px-2 bg-background focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer shrink-0"
+                onChange={e => setNewType(e.target.value as ColType)}
+                title="Column type">
+                <option value="text">Text</option>
+                <option value="number">Number</option>
+                <option value="date">Date</option>
+              </select>
+              <Button size="sm" className="h-8 shrink-0 px-3" disabled={!newName.trim() || createMut.isPending}
+                onClick={handleCreate}>
+                <Plus className="w-3.5 h-3.5 mr-1" /> Add
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground/60">
+              Type controls the input used when editing — Text, Number, or Date picker.
+            </p>
           </div>
         </div>
       </DialogContent>
@@ -410,16 +486,18 @@ function ManageColumnsDialog({ open, onClose }: { open: boolean; onClose: () => 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function Leads() {
-  const [search,     setSearch]     = useState("");
-  const [timeFilter, setTimeFilter] = useState("all");
-  const [editingCell,  setEditingCell]  = useState<{ rowId: number; colKey: string } | null>(null);
-  const [showNewRow,   setShowNewRow]   = useState(false);
-  const [manageOpen,   setManageOpen]   = useState(false);
+  const [search,      setSearch]      = useState("");
+  const [timeFilter,  setTimeFilter]  = useState("all");
+  const [editingCell, setEditingCell] = useState<{ rowId: number; colKey: string } | null>(null);
+  const [showNewRow,  setShowNewRow]  = useState(false);
+  const [manageOpen,  setManageOpen]  = useState(false);
+  const [highlightId, setHighlightId] = useState<number | null>(null);
 
   const [columnOrder,   setColumnOrder]   = useState<string[]>(BUILTIN_COLUMNS.map(c => c.key));
   const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(new Set());
   const [rowOrder,      setRowOrder]      = useState<number[]>([]);
   const prefsReady = useRef(false);
+  const tableScrollRef = useRef<HTMLDivElement>(null);
 
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -431,15 +509,15 @@ export default function Leads() {
     queryFn: () => api.fetchLeads(search),
   });
 
-  const { data: stats } = useQuery({ queryKey: ["leads-stats"], queryFn: api.fetchStats });
-  const { data: savedPrefs } = useQuery({ queryKey: ["leads-prefs"], queryFn: api.fetchPrefs });
+  const { data: stats }       = useQuery({ queryKey: ["leads-stats"],   queryFn: api.fetchStats });
+  const { data: savedPrefs }  = useQuery({ queryKey: ["leads-prefs"],   queryFn: api.fetchPrefs });
 
   const { data: customColRecords = [] } = useQuery<CustomColRecord[]>({
     queryKey: ["lead-custom-cols"],
     queryFn: api.fetchCustomCols,
   });
 
-  // ── Build full column list (builtin + custom) ─────────────────────────────
+  // ── Build full column list ────────────────────────────────────────────────
 
   const allColumns: ColumnDef[] = React.useMemo(() => {
     const custom: ColumnDef[] = customColRecords.map(c => ({
@@ -448,11 +526,12 @@ export default function Leads() {
       isCustom: true,
       fieldKey: c.fieldKey,
       customId: c.id,
+      colType: c.type,
     }));
     return [...BUILTIN_COLUMNS, ...custom];
   }, [customColRecords]);
 
-  // ── Load saved prefs once ────────────────────────────────────────────────
+  // ── Load saved prefs once ─────────────────────────────────────────────────
 
   useEffect(() => {
     if (savedPrefs === undefined || prefsReady.current) return;
@@ -469,7 +548,21 @@ export default function Leads() {
     if (missing.length) setColumnOrder(prev => [...prev, ...missing.map(c => c.key)]);
   }, [allColumns]);
 
-  // ── Prefs save ───────────────────────────────────────────────────────────
+  // Scroll to + highlight a newly created row once it lands in rawLeads
+  useEffect(() => {
+    if (!highlightId) return;
+    const exists = Array.isArray(rawLeads) && rawLeads.some(l => l.id === highlightId);
+    if (!exists) return;
+    // Row is in the data — wait one frame for DOM paint, then scroll
+    const raf = requestAnimationFrame(() => {
+      const el = tableScrollRef.current?.querySelector(`[data-lead-id="${highlightId}"]`);
+      el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+    const timer = setTimeout(() => setHighlightId(null), 2500);
+    return () => { cancelAnimationFrame(raf); clearTimeout(timer); };
+  }, [highlightId, rawLeads]);
+
+  // ── Prefs save ────────────────────────────────────────────────────────────
 
   const savePrefs = useCallback((patch: Partial<LeadsPrefs>) => {
     api.savePrefs({ columnOrder, hiddenColumns: [...hiddenColumns], rowOrder, ...patch }).catch(() => {});
@@ -496,16 +589,19 @@ export default function Leads() {
 
   const createMut = useMutation({
     mutationFn: api.createLead,
-    onSuccess: () => {
+    onSuccess: (newLead) => {
       qc.invalidateQueries({ queryKey: ["leads"] });
       qc.invalidateQueries({ queryKey: ["leads-stats"] });
       setShowNewRow(false);
       toast({ title: "Lead added" });
+
+      // Scroll to new row + flash highlight
+      setHighlightId(newLead.id);
     },
     onError: () => toast({ title: "Failed to add lead", variant: "destructive" }),
   });
 
-  // ── Computed columns ────────────────────────────────────────────────────────
+  // ── Computed columns ─────────────────────────────────────────────────────
 
   const orderedAllCols = React.useMemo(() => {
     const ordered = columnOrder
@@ -517,7 +613,7 @@ export default function Leads() {
 
   const visibleCols = orderedAllCols.filter(c => !hiddenColumns.has(c.key));
 
-  // ── Leads in row order ──────────────────────────────────────────────────────
+  // ── Leads in row order ────────────────────────────────────────────────────
 
   const leads: LeadRecord[] = React.useMemo(() => {
     if (!Array.isArray(rawLeads)) return [];
@@ -529,7 +625,7 @@ export default function Leads() {
     return ordered;
   }, [rawLeads, rowOrder]);
 
-  // ── Column toggle ────────────────────────────────────────────────────────────
+  // ── Column toggle ─────────────────────────────────────────────────────────
 
   const toggleColumn = (key: string) => {
     const next = new Set(hiddenColumns);
@@ -539,7 +635,7 @@ export default function Leads() {
     savePrefs({ hiddenColumns: [...next] });
   };
 
-  // ── DnD ─────────────────────────────────────────────────────────────────────
+  // ── DnD ──────────────────────────────────────────────────────────────────
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
@@ -560,152 +656,175 @@ export default function Leads() {
     savePrefs({ rowOrder: next });
   };
 
-  // ── Cell edit ────────────────────────────────────────────────────────────────
+  // ── Cell edit ─────────────────────────────────────────────────────────────
 
   const handleCellDoubleClick = (rowId: number, colKey: string, _val: string) => setEditingCell({ rowId, colKey });
 
   const handleCellSave = (rowId: number, col: ColumnDef, val: string) => {
     setEditingCell(null);
+    let parsed: any = val;
+    if (col.key === "leadValue" || col.colType === "number") parsed = parseFloat(val) || 0;
     const data: Partial<LeadRecord> = col.isCustom
-      ? { customData: { [col.fieldKey!]: val } } as any
-      : { [col.key]: col.key === "leadValue" ? parseFloat(val) || 0 : val } as any;
+      ? { customData: { [col.fieldKey!]: parsed } } as any
+      : { [col.key]: parsed } as any;
     patchMut.mutate({ id: rowId, data });
   };
 
-  // ─── Render ──────────────────────────────────────────────────────────────────
+  // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-5">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <h1 className="text-2xl font-bold tracking-tight">Global Leads Database</h1>
-        <div className="flex items-center gap-2">
+    <>
+      {/* Flash animation keyframes — injected once */}
+      <style>{`
+        @keyframes flash-highlight {
+          0%   { background-color: hsl(var(--primary) / 0.25); box-shadow: inset 0 0 0 1px hsl(var(--primary) / 0.4); }
+          100% { background-color: transparent; box-shadow: none; }
+        }
+        .row-flash { animation: flash-highlight 2s ease-out forwards; }
+      `}</style>
 
-          {/* Columns popover */}
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="outline" size="sm" className="h-9 gap-2">
-                <Columns className="w-4 h-4" /> Columns
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-64 p-4">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Show / Hide</p>
-              <div className="space-y-0.5 max-h-64 overflow-y-auto pr-1">
-                {orderedAllCols.map(col => (
-                  <div key={col.key} className="flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-muted/50">
-                    <span className="text-sm font-medium truncate">{col.label}</span>
-                    <Switch checked={!hiddenColumns.has(col.key)} onCheckedChange={() => toggleColumn(col.key)} />
-                  </div>
+      <div className="space-y-5">
+        {/* Header */}
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <h1 className="text-2xl font-bold tracking-tight">Global Leads Database</h1>
+          <div className="flex items-center gap-2">
+
+            {/* Columns popover */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="h-9 gap-2">
+                  <Columns className="w-4 h-4" /> Columns
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-64 p-4">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Show / Hide</p>
+                <div className="space-y-0.5 max-h-64 overflow-y-auto pr-1">
+                  {orderedAllCols.map(col => (
+                    <div key={col.key} className="flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-muted/50">
+                      <span className="text-sm font-medium truncate flex items-center gap-1.5">
+                        {col.isCustom && col.colType && (
+                          <span className="text-muted-foreground/50">{TYPE_ICONS[col.colType]}</span>
+                        )}
+                        {col.label}
+                      </span>
+                      <Switch checked={!hiddenColumns.has(col.key)} onCheckedChange={() => toggleColumn(col.key)} />
+                    </div>
+                  ))}
+                </div>
+                <div className="border-t border-border/40 mt-3 pt-3">
+                  <button className="flex items-center gap-1.5 text-sm text-primary hover:text-primary/80 font-medium w-full"
+                    onClick={() => setManageOpen(true)}>
+                    <Settings2 className="w-3.5 h-3.5" /> Manage custom columns
+                  </button>
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            <Select value={timeFilter} onValueChange={setTimeFilter}>
+              <SelectTrigger className="h-9 w-36 text-sm"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {[["all","All time"],["7d","Last 7 days"],["3m","Last 3 months"],["6m","Last 6 months"],["this_month","This month"],["last_month","Last month"],["this_year","This year"],["last_year","Last year"]].map(([v,l]) => (
+                  <SelectItem key={v} value={v}>{l}</SelectItem>
                 ))}
-              </div>
-              <div className="border-t border-border/40 mt-3 pt-3">
-                <button className="flex items-center gap-1.5 text-sm text-primary hover:text-primary/80 font-medium w-full"
-                  onClick={() => setManageOpen(true)}>
-                  <Settings2 className="w-3.5 h-3.5" /> Manage custom columns
-                </button>
-              </div>
-            </PopoverContent>
-          </Popover>
+              </SelectContent>
+            </Select>
 
-          <Select value={timeFilter} onValueChange={setTimeFilter}>
-            <SelectTrigger className="h-9 w-36 text-sm"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {[["all","All time"],["7d","Last 7 days"],["3m","Last 3 months"],["6m","Last 6 months"],["this_month","This month"],["last_month","Last month"],["this_year","This year"],["last_year","Last year"]].map(([v,l]) => (
-                <SelectItem key={v} value={v}>{l}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input placeholder="Search leads…" className="pl-8 h-9 w-48" onChange={e => setSearch(e.target.value)} />
+            </div>
+          </div>
+        </div>
 
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input placeholder="Search leads…" className="pl-8 h-9 w-48" onChange={e => setSearch(e.target.value)} />
+        {/* Stats */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          <StatCard icon={<LayoutGrid   className="w-5 h-5" />} label="Total Leads"    value={stats?.totalLeads ?? 0} />
+          <StatCard icon={<Clock        className="w-5 h-5" />} label="Active Leads"   value={stats?.activeLeads ?? 0}           iconBg="bg-amber-100 text-amber-600" />
+          <StatCard icon={<CheckCircle2 className="w-5 h-5" />} label="Paid Leads"    value={stats?.paidLeads ?? 0}             iconBg="bg-green-100 text-green-600" />
+          <StatCard icon={<DollarSign   className="w-5 h-5" />} label="Paid Revenue"  value={formatCurrency(stats?.paidRevenue ?? 0)}  iconBg="bg-green-100 text-green-700" />
+          <StatCard icon={<TrendingUp   className="w-5 h-5" />} label="Total Revenue" value={formatCurrency(stats?.totalRevenue ?? 0)} iconBg="bg-blue-100 text-blue-600" />
+        </div>
+
+        {/* Table card — fixed height so the Add row button stays visible */}
+        <div className="bg-card border border-border rounded-lg overflow-hidden shadow-sm flex flex-col"
+             style={{ height: "calc(100vh - 340px)", minHeight: "420px" }}>
+
+          {/* Scrollable table body */}
+          <div className="flex-1 overflow-auto" ref={tableScrollRef}>
+            <Table>
+              <TableHeader className="sticky top-0 z-10 bg-card shadow-[0_1px_0_0_hsl(var(--border))]">
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleColDragEnd}>
+                  <SortableContext items={orderedAllCols.map(c => c.key)} strategy={horizontalListSortingStrategy}>
+                    <TableRow className="bg-muted/40 hover:bg-muted/40">
+                      <TableHead className="w-6 px-0.5" />
+                      {visibleCols.map(col => <SortableColHeader key={col.key} col={col} />)}
+                      <TableHead className="w-8 px-1" />
+                    </TableRow>
+                  </SortableContext>
+                </DndContext>
+              </TableHeader>
+
+              <TableBody>
+                {leadsLoading ? (
+                  <TableRow><TableCell colSpan={visibleCols.length + 2} className="h-24 text-center text-muted-foreground">Loading…</TableCell></TableRow>
+                ) : (
+                  <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleRowDragEnd}>
+                    <SortableContext items={leads.map(l => l.id)} strategy={verticalListSortingStrategy}>
+                      {leads.map((lead, i) => (
+                        <SortableLeadRow key={lead.id} lead={lead} index={i} visibleCols={visibleCols}
+                          editingCell={editingCell}
+                          highlighted={highlightId === lead.id}
+                          onCellDoubleClick={handleCellDoubleClick}
+                          onCellSave={handleCellSave}
+                          onCellCancel={() => setEditingCell(null)}
+                          onDelete={id => deleteMut.mutate(id)}
+                          isDeleting={deleteMut.isPending}
+                        />
+                      ))}
+                    </SortableContext>
+                  </DndContext>
+                )}
+
+                {showNewRow && (
+                  <NewLeadRow visibleCols={visibleCols}
+                    onSave={data => createMut.mutate(data)}
+                    onCancel={() => setShowNewRow(false)}
+                  />
+                )}
+
+                {leads.length > 0 && (
+                  <TableRow className="bg-muted/20 font-medium border-t-2 border-border">
+                    <TableCell className="w-6 px-0.5" />
+                    {visibleCols.map(col => (
+                      <TableCell key={col.key} className="px-1 py-2.5 text-sm border-r border-border/30 last:border-r-0">
+                        {col.key === "leadValue" ? formatCurrency(leads.reduce((s, r) => s + (r.leadValue || 0), 0)) : ""}
+                      </TableCell>
+                    ))}
+                    <TableCell />
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* Sticky footer — always visible regardless of scroll position */}
+          <div className="border-t border-border/60 px-3 py-2 shrink-0 bg-card flex items-center justify-between">
+            <button
+              className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors group disabled:opacity-40 disabled:cursor-not-allowed"
+              onClick={() => { setShowNewRow(true); setEditingCell(null); }}
+              disabled={showNewRow}>
+              <span className="flex items-center justify-center w-5 h-5 rounded border border-dashed border-muted-foreground/40 group-hover:border-foreground/60 group-disabled:border-muted-foreground/20 transition-colors">
+                <Plus className="w-3 h-3" />
+              </span>
+              Add row
+            </button>
+            <span className="text-xs text-muted-foreground">{leads.length} lead{leads.length !== 1 ? "s" : ""}</span>
           </div>
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        <StatCard icon={<LayoutGrid   className="w-5 h-5" />} label="Total Leads"    value={stats?.totalLeads ?? 0} />
-        <StatCard icon={<Clock        className="w-5 h-5" />} label="Active Leads"   value={stats?.activeLeads ?? 0}           iconBg="bg-amber-100 text-amber-600" />
-        <StatCard icon={<CheckCircle2 className="w-5 h-5" />} label="Paid Leads"    value={stats?.paidLeads ?? 0}             iconBg="bg-green-100 text-green-600" />
-        <StatCard icon={<DollarSign   className="w-5 h-5" />} label="Paid Revenue"  value={formatCurrency(stats?.paidRevenue ?? 0)}  iconBg="bg-green-100 text-green-700" />
-        <StatCard icon={<TrendingUp   className="w-5 h-5" />} label="Total Revenue" value={formatCurrency(stats?.totalRevenue ?? 0)} iconBg="bg-blue-100 text-blue-600" />
-      </div>
-
-      {/* Table */}
-      <div className="bg-card border border-border rounded-lg overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleColDragEnd}>
-                <SortableContext items={orderedAllCols.map(c => c.key)} strategy={horizontalListSortingStrategy}>
-                  <TableRow className="bg-muted/40 hover:bg-muted/40">
-                    <TableHead className="w-6 px-0.5" />
-                    {visibleCols.map(col => <SortableColHeader key={col.key} col={col} />)}
-                    <TableHead className="w-8 px-1" />
-                  </TableRow>
-                </SortableContext>
-              </DndContext>
-            </TableHeader>
-
-            <TableBody>
-              {leadsLoading ? (
-                <TableRow><TableCell colSpan={visibleCols.length + 2} className="h-24 text-center text-muted-foreground">Loading…</TableCell></TableRow>
-              ) : (
-                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleRowDragEnd}>
-                  <SortableContext items={leads.map(l => l.id)} strategy={verticalListSortingStrategy}>
-                    {leads.map((lead, i) => (
-                      <SortableLeadRow key={lead.id} lead={lead} index={i} visibleCols={visibleCols}
-                        editingCell={editingCell}
-                        onCellDoubleClick={handleCellDoubleClick}
-                        onCellSave={handleCellSave}
-                        onCellCancel={() => setEditingCell(null)}
-                        onDelete={id => deleteMut.mutate(id)}
-                        isDeleting={deleteMut.isPending}
-                      />
-                    ))}
-                  </SortableContext>
-                </DndContext>
-              )}
-
-              {showNewRow && (
-                <NewLeadRow visibleCols={visibleCols}
-                  onSave={data => createMut.mutate(data)}
-                  onCancel={() => setShowNewRow(false)}
-                />
-              )}
-
-              {leads.length > 0 && (
-                <TableRow className="bg-muted/20 font-medium border-t-2 border-border">
-                  <TableCell className="w-6 px-0.5" />
-                  {visibleCols.map(col => (
-                    <TableCell key={col.key} className="px-1 py-2.5 text-sm border-r border-border/30 last:border-r-0">
-                      {col.key === "leadValue" ? formatCurrency(leads.reduce((s, r) => s + (r.leadValue || 0), 0)) : ""}
-                    </TableCell>
-                  ))}
-                  <TableCell />
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
-
-        <div className="border-t border-border/60 px-3 py-2">
-          <button
-            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors group"
-            onClick={() => { setShowNewRow(true); setEditingCell(null); }}
-            disabled={showNewRow}
-          >
-            <span className="flex items-center justify-center w-5 h-5 rounded border border-dashed border-muted-foreground/40 group-hover:border-foreground/60 transition-colors">
-              <Plus className="w-3 h-3" />
-            </span>
-            Add row
-          </button>
-        </div>
-      </div>
-
       <ManageColumnsDialog open={manageOpen} onClose={() => { setManageOpen(false); qc.invalidateQueries({ queryKey: ["lead-custom-cols"] }); }} />
-    </div>
+    </>
   );
 }
 

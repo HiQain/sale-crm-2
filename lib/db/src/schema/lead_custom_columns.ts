@@ -5,6 +5,7 @@ export const leadCustomColumnsTable = pgTable("lead_custom_columns", {
   name:      text("name").notNull(),
   fieldKey:  text("field_key").notNull().unique(),
   position:  integer("position").notNull().default(0),
+  type:      text("type").notNull().default("text"),  // "text" | "number" | "date"
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
