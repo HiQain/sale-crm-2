@@ -1060,7 +1060,7 @@ export default function Leads() {
                   <SortableContext items={orderedAllCols.map(c => c.key)} strategy={horizontalListSortingStrategy}>
                     <TableRow className="bg-muted/40 hover:bg-muted/40">
                       <TableHead className="w-6 px-0.5" />
-                      {visibleCols.map(col => <SortableColHeader key={col.key} col={col} />)}
+                      {visibleCols.map(col => <SortableColHeader key={col.key} col={col} width={columnWidths[col.key] ?? DEFAULT_COL_WIDTH} onResize={handleColResize} onResizeEnd={handleColResizeEnd} />)}
                       <TableHead className="w-8 px-1" />
                     </TableRow>
                   </SortableContext>
