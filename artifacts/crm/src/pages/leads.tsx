@@ -991,9 +991,9 @@ export default function Leads() {
         .row-flash { animation: flash-highlight 2s ease-out forwards; }
       `}</style>
 
-      <div className="flex flex-col" style={{ height: "calc(100vh - 154px)" }}>
+      <div className="flex flex-col px-[10px]" style={{ height: "calc(100vh - 154px)" }}>
         {/* Header */}
-        <div className="flex items-center justify-between gap-4 flex-wrap px-4 pb-2">
+        <div className="flex items-center justify-between gap-4 flex-wrap pb-2">
           <h1 className="text-2xl font-bold tracking-tight">Global Leads Database</h1>
           <div className="flex items-center gap-2">
 
