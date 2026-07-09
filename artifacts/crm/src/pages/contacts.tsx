@@ -16,12 +16,13 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Loader2 } from "lucide-react";
+import { formatPhoneNumber, isValidPhoneNumber } from "@/lib/utils";
 
 const createSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName:  z.string().min(1, "Last name is required"),
   email:     z.string().email("Invalid email").optional().or(z.literal("")),
-  phone:     z.string().optional().or(z.literal("")),
+  phone:     z.string().optional().or(z.literal("")).refine(isValidPhoneNumber, "Phone must be 10 digits, e.g. (201) 000-9090"),
   status:    z.enum(["lead","prospect","customer","churned","inactive"]).default("lead"),
 });
 
@@ -56,7 +57,12 @@ export default function Contacts() {
   };
 
   const handleEdit = (row: Contact, key: keyof Contact, value: string) => {
-    updateContact.mutate({ id: row.id, data: { [key]: value } }, {
+    const finalValue = key === "phone" ? formatPhoneNumber(value) : value;
+    if (key === "phone" && !isValidPhoneNumber(finalValue)) {
+      toast?.({ title: "Invalid phone number", description: "Use format (201) 000-9090", variant: "destructive" });
+      return;
+    }
+    updateContact.mutate({ id: row.id, data: { [key]: finalValue } }, {
       onSuccess: (updated) => qc.setQueryData(queryKey, (old: Contact[]) => old?.map(c => c.id === updated.id ? updated : c)),
       onError: () => toast?.({ title: "Failed to update", variant: "destructive" }),
     });
@@ -72,11 +78,16 @@ export default function Contacts() {
   };
 
   const handleAddInline = (data: Record<string, string>) => {
+    const phone = data.phone ? formatPhoneNumber(data.phone) : data.phone;
+    if (phone && !isValidPhoneNumber(phone)) {
+      toast?.({ title: "Invalid phone number", description: "Use format (201) 000-9090", variant: "destructive" });
+      return;
+    }
     const payload = {
       firstName: data.firstName || "",
       lastName:  data.lastName  || "",
       email:     data.email,
-      phone:     data.phone,
+      phone,
       status:    (data.status as any) || "lead",
     };
     createContact.mutate({ data: payload as ContactInput }, {
@@ -132,7 +143,9 @@ export default function Contacts() {
                 <FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" {...field} /></FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="phone" render={({ field }) => (
-                <FormItem><FormLabel>Phone</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                <FormItem><FormLabel>Phone</FormLabel><FormControl>
+                  <Input {...field} placeholder="(201) 000-9090" onChange={e => field.onChange(formatPhoneNumber(e.target.value))} />
+                </FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="status" render={({ field }) => (
                 <FormItem>

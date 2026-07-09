@@ -1,0 +1,1 @@
+- [Missing --button-outline CSS var](button-outline-css-var.md) — outline buttons render with a black/white border if the theme forgot to define this var.

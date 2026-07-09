@@ -50,11 +50,11 @@ async function main() {
 
   // --- Leads ---
   const leadDefs = [
-    { contact: "+1-555-0301", email: "lead1@example.com", businessOwner: "Alex Turner", businessName: "Turner Consulting", service: "Web Design", response: "Interested", followUp: "Call back next week", leadValue: 1500, leadAssignee: "admin", status: "pending" },
-    { contact: "+1-555-0302", email: "lead2@example.com", businessOwner: "Priya Nair", businessName: "Nair Logistics", service: "SEO", response: "Requested proposal", followUp: "Send quote", leadValue: 3200, leadAssignee: "admin", status: "contacted" },
-    { contact: "+1-555-0303", email: "lead3@example.com", businessOwner: "Carlos Mendez", businessName: "Mendez Auto", service: "Branding", response: "Signed up", followUp: "Kickoff call", leadValue: 5000, leadAssignee: "admin", status: "paid" },
-    { contact: "+1-555-0304", email: "lead4@example.com", businessOwner: "Olivia Park", businessName: "Park Bakery", service: "Social Media", response: "No response yet", followUp: "Follow up email", leadValue: 800, leadAssignee: "admin", status: "pending" },
-    { contact: "+1-555-0305", email: "lead5@example.com", businessOwner: "Ethan Brooks", businessName: "Brooks Fitness", service: "Web Design", response: "Onboarded", followUp: "None", leadValue: 2200, leadAssignee: "admin", status: "paid" },
+    { contact: "(555) 000-0301", email: "lead1@example.com", businessOwner: "Alex Turner", businessName: "Turner Consulting", service: "Web Design", response: "Interested", followUp: "2026-07-16", leadValue: 1500, leadAssignee: "admin", status: "pending" },
+    { contact: "(555) 000-0302", email: "lead2@example.com", businessOwner: "Priya Nair", businessName: "Nair Logistics", service: "SEO", response: "Requested proposal", followUp: "2026-07-14", leadValue: 3200, leadAssignee: "admin", status: "contacted" },
+    { contact: "(555) 000-0303", email: "lead3@example.com", businessOwner: "Carlos Mendez", businessName: "Mendez Auto", service: "Branding", response: "Signed up", followUp: "2026-07-10", leadValue: 5000, leadAssignee: "admin", status: "paid" },
+    { contact: "(555) 000-0304", email: "lead4@example.com", businessOwner: "Olivia Park", businessName: "Park Bakery", service: "Social Media", response: "No response yet", followUp: "2026-07-20", leadValue: 800, leadAssignee: "admin", status: "pending" },
+    { contact: "(555) 000-0305", email: "lead5@example.com", businessOwner: "Ethan Brooks", businessName: "Brooks Fitness", service: "Web Design", response: "Onboarded", followUp: "2026-07-09", leadValue: 2200, leadAssignee: "admin", status: "paid" },
   ];
   const leads = await db
     .insert(leadsTable)

@@ -105,6 +105,8 @@
   --chart-3: 316 73% 52%;
   --chart-4: 346 87% 60%;
   --chart-5: 22 92% 52%;
+
+  --button-outline: rgba(0, 0, 0, 0.1);
 }
 
 .dark {
@@ -146,6 +148,8 @@
   --sidebar-accent: 217.2 32.6% 17.5%;
   --sidebar-accent-foreground: 210 40% 98%;
   --sidebar-ring: 212.7 26.8% 83.9%;
+
+  --button-outline: rgba(255, 255, 255, 0.1);
 }
 
 @layer base {

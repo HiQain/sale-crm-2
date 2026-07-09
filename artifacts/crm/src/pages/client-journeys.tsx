@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { LayoutGrid, CheckCircle2, DollarSign, TrendingUp, Search, Trash2, Plus, X } from "lucide-react";
 import React from "react";
+import { formatPhoneNumber, isValidPhoneNumber } from "@/lib/utils";
 
 interface JourneyRecord {
   id: number;
@@ -99,18 +100,20 @@ function CellEditor({ colKey, value, onSave, onCancel }: { colKey: string; value
   }
 
   return (
-    <input ref={ref} type={moneyKeys.has(colKey) ? "number" : colKey === "date" ? "date" : "text"} value={val}
+    <input ref={ref} type={moneyKeys.has(colKey) ? "number" : colKey === "date" ? "date" : colKey === "phone" ? "tel" : "text"} value={val}
       className="w-full min-w-[80px] text-sm border border-primary/40 rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary px-1.5 py-0.5"
-      onChange={e => setVal(e.target.value)} onBlur={commit} onKeyDown={onKey} />
+      onChange={e => setVal(colKey === "phone" ? formatPhoneNumber(e.target.value) : e.target.value)} onBlur={commit} onKeyDown={onKey} />
   );
 }
 
 function NewJourneyRow({ visibleCols, onSave, onCancel }: { visibleCols: ColumnDef[]; onSave: (d: Partial<JourneyRecord>) => void; onCancel: () => void }) {
   const [data, setData] = useState<Record<string, string>>({ status: "pending", paidAmount: "0", balance: "0", total: "0" });
+  const [err, setErr] = useState("");
   const firstRef = useRef<HTMLInputElement>(null);
   React.useEffect(() => { firstRef.current?.focus(); }, []);
 
   const commit = () => {
+    if (data.phone && !isValidPhoneNumber(data.phone)) { setErr("Phone must be 10 digits, e.g. (201) 000-9090"); return; }
     const payload: any = { ...data };
     ["paidAmount", "balance", "total"].forEach(k => { if (data[k] !== undefined) payload[k] = parseFloat(data[k]) || 0; });
     onSave(payload);
@@ -135,13 +138,18 @@ function NewJourneyRow({ visibleCols, onSave, onCancel }: { visibleCols: ColumnD
               {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           ) : (
-            <input ref={idx === 0 ? firstRef : undefined}
-              type={moneyKeys.has(col.key) ? "number" : col.key === "date" ? "date" : "text"}
-              placeholder={col.label}
-              value={data[col.key] ?? ""}
-              className="w-full min-w-[60px] text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary px-1.5 py-0.5 placeholder:text-muted-foreground/50"
-              onChange={e => setData(d => ({ ...d, [col.key]: e.target.value }))}
-              onKeyDown={e => onKey(e, idx)} />
+            <div className="relative">
+              <input ref={idx === 0 ? firstRef : undefined}
+                type={moneyKeys.has(col.key) ? "number" : col.key === "date" ? "date" : col.key === "phone" ? "tel" : "text"}
+                placeholder={col.key === "phone" ? "(201) 000-9090" : col.label}
+                value={data[col.key] ?? ""}
+                className={`w-full min-w-[60px] text-sm border rounded-md bg-background focus:outline-none focus:ring-1 px-1.5 py-0.5 placeholder:text-muted-foreground/50 ${col.key === "phone" && err ? "border-destructive focus:ring-destructive" : "border-border focus:ring-primary"}`}
+                onChange={e => { const nv = col.key === "phone" ? formatPhoneNumber(e.target.value) : e.target.value; setData(d => ({ ...d, [col.key]: nv })); if (col.key === "phone" && err) setErr(""); }}
+                onKeyDown={e => onKey(e, idx)} />
+              {col.key === "phone" && err && (
+                <p className="absolute top-full left-0 mt-0.5 text-[10px] text-destructive whitespace-nowrap z-30">{err}</p>
+              )}
+            </div>
           )}
         </TableCell>
       ))}
@@ -192,6 +200,10 @@ export default function ClientJourneys() {
   const visibleCols = COLUMNS.filter(c => visible.has(c.key));
 
   const handleCellSave = (rowId: number, colKey: string, val: string) => {
+    if (colKey === "phone" && !isValidPhoneNumber(val)) {
+      toast({ title: "Invalid phone number", description: "Use format (201) 000-9090", variant: "destructive" });
+      return;
+    }
     setEditingCell(null);
     const data: any = { [colKey]: moneyKeys.has(colKey) ? parseFloat(val) || 0 : val };
     patchMut.mutate({ id: rowId, data });
@@ -251,6 +263,7 @@ export default function ClientJourneys() {
                         const display = col.key === "status" ? <StatusBadge status={row.status} />
                           : col.key === "date" ? fmtDate(raw)
                           : moneyKeys.has(col.key) ? formatCurrency(raw ?? 0)
+                          : col.key === "phone" && raw ? formatPhoneNumber(raw)
                           : raw ?? "";
                         return (
                           <TableCell key={col.key}

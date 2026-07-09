@@ -10,6 +10,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useToast } from "@/hooks/use-toast";
+import { formatPhoneNumber, isValidPhoneNumber } from "@/lib/utils";
 import { StatCard, formatCurrency } from "@/components/ui/stat-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -145,6 +146,8 @@ function validateFieldValue(key: string, value: string): string {
     return "Invalid email format";
   if ((key === "leadValue") && (isNaN(parseFloat(value)) || parseFloat(value) < 0))
     return "Must be a positive number";
+  if (key === "contact" && !isValidPhoneNumber(value))
+    return "Phone must be 10 digits, e.g. (201) 000-9090";
   return "";
 }
 
@@ -207,28 +210,35 @@ function MultiValueCell({ values, colKey, inputType, onUpdate }: {
   inputType?: string;
   onUpdate: (vals: string[]) => void;
 }) {
-  const [open,    setOpen]    = useState(false);
-  const [draft,   setDraft]   = useState("");
-  const [editIdx, setEditIdx] = useState<number | null>(null);
-  const [editVal, setEditVal] = useState("");
+  const [open,     setOpen]     = useState(false);
+  const [draft,    setDraft]    = useState("");
+  const [draftErr, setDraftErr] = useState("");
+  const [editIdx,  setEditIdx]  = useState<number | null>(null);
+  const [editVal,  setEditVal]  = useState("");
+  const [editErr,  setEditErr]  = useState("");
   const addRef = useRef<HTMLInputElement>(null);
 
   const addValue = () => {
     const v = draft.trim();
     if (!v) return;
-    onUpdate([...values, v]);
+    if (colKey === "contact" && !isValidPhoneNumber(v)) { setDraftErr("Phone must be 10 digits, e.g. (201) 000-9090"); return; }
+    onUpdate([...values, colKey === "contact" ? formatPhoneNumber(v) : v]);
     setDraft("");
+    setDraftErr("");
     setTimeout(() => addRef.current?.focus(), 0);
   };
 
   const removeValue = (i: number) => onUpdate(values.filter((_, idx) => idx !== i));
 
-  const startEdit = (i: number) => { setEditIdx(i); setEditVal(values[i]); };
+  const startEdit = (i: number) => { setEditIdx(i); setEditVal(values[i]); setEditErr(""); };
   const commitEdit = () => {
     if (editIdx === null) return;
     const v = editVal.trim();
-    onUpdate(v ? values.map((val, i) => i === editIdx ? v : val) : values.filter((_, i) => i !== editIdx));
+    if (v && colKey === "contact" && !isValidPhoneNumber(v)) { setEditErr("Phone must be 10 digits, e.g. (201) 000-9090"); return; }
+    const finalVal = colKey === "contact" && v ? formatPhoneNumber(v) : v;
+    onUpdate(finalVal ? values.map((val, i) => i === editIdx ? finalVal : val) : values.filter((_, i) => i !== editIdx));
     setEditIdx(null);
+    setEditErr("");
   };
 
   const SHOW = 2;
@@ -249,7 +259,7 @@ function MultiValueCell({ values, colKey, inputType, onUpdate }: {
           {values.slice(0, SHOW).map((v, i) => (
             <span key={i}
               className="inline-flex items-center bg-muted/70 border border-border/60 rounded-sm text-xs px-1.5 py-0 max-w-[100px] shrink-0">
-              <span className="truncate">{v}</span>
+              <span className="truncate">{colKey === "contact" ? formatPhoneNumber(v) : v}</span>
             </span>
           ))}
           {values.length > SHOW && (
@@ -275,12 +285,15 @@ function MultiValueCell({ values, colKey, inputType, onUpdate }: {
           {values.map((v, i) => (
             <div key={i} className="flex items-center gap-1.5 group/item rounded hover:bg-muted/30 px-1 py-0.5">
               {editIdx === i ? (
-                <input autoFocus type={itype} value={editVal}
-                  className="flex-1 text-xs border border-primary/50 rounded px-1.5 py-0.5 bg-background focus:outline-none focus:ring-1 focus:ring-primary"
-                  onChange={e => setEditVal(e.target.value)}
-                  onBlur={commitEdit}
-                  onKeyDown={e => { if (e.key === "Enter") commitEdit(); if (e.key === "Escape") setEditIdx(null); e.stopPropagation(); }}
-                />
+                <div className="flex-1 relative">
+                  <input autoFocus type={itype} value={editVal}
+                    className={`w-full text-xs border rounded px-1.5 py-0.5 bg-background focus:outline-none focus:ring-1 ${editErr ? "border-destructive focus:ring-destructive" : "border-primary/50 focus:ring-primary"}`}
+                    onChange={e => { const nv = colKey === "contact" ? formatPhoneNumber(e.target.value) : e.target.value; setEditVal(nv); if (editErr) setEditErr(""); }}
+                    onBlur={commitEdit}
+                    onKeyDown={e => { if (e.key === "Enter") commitEdit(); if (e.key === "Escape") { setEditIdx(null); setEditErr(""); } e.stopPropagation(); }}
+                  />
+                  {editErr && <p className="text-[10px] text-destructive mt-0.5">{editErr}</p>}
+                </div>
               ) : (
                 <>
                   {i === 0 && (
@@ -301,22 +314,25 @@ function MultiValueCell({ values, colKey, inputType, onUpdate }: {
         </div>
 
         {/* Add new value */}
-        <div className="flex gap-1.5 border-t border-border/40 pt-2">
-          <input ref={addRef} type={itype}
-            placeholder={`Add ${colKey === "contact" ? "phone" : colKey === "email" ? "email" : "value"}…`}
-            value={draft}
-            className="flex-1 text-xs border border-border rounded px-2 py-1 bg-background focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground/40"
-            onChange={e => setDraft(e.target.value)}
-            onKeyDown={e => {
-              e.stopPropagation();
-              if (e.key === "Enter") { e.preventDefault(); addValue(); }
-              if (e.key === "Escape") setOpen(false);
-            }}
-          />
-          <button onClick={addValue} disabled={!draft.trim()}
-            className="px-2.5 py-1 text-xs bg-primary text-primary-foreground rounded disabled:opacity-30 hover:bg-primary/90 transition-all">
-            Add
-          </button>
+        <div className="border-t border-border/40 pt-2">
+          <div className="flex gap-1.5">
+            <input ref={addRef} type={itype}
+              placeholder={colKey === "contact" ? "(201) 000-9090" : colKey === "email" ? "Add email…" : "Add value…"}
+              value={draft}
+              className={`flex-1 text-xs border rounded px-2 py-1 bg-background focus:outline-none focus:ring-1 placeholder:text-muted-foreground/40 ${draftErr ? "border-destructive focus:ring-destructive" : "border-border focus:ring-primary"}`}
+              onChange={e => { const nv = colKey === "contact" ? formatPhoneNumber(e.target.value) : e.target.value; setDraft(nv); if (draftErr) setDraftErr(""); }}
+              onKeyDown={e => {
+                e.stopPropagation();
+                if (e.key === "Enter") { e.preventDefault(); addValue(); }
+                if (e.key === "Escape") setOpen(false);
+              }}
+            />
+            <button onClick={addValue} disabled={!draft.trim()}
+              className="px-2.5 py-1 text-xs bg-primary text-primary-foreground rounded disabled:opacity-30 hover:bg-primary/90 transition-all">
+              Add
+            </button>
+          </div>
+          {draftErr && <p className="text-[10px] text-destructive mt-1">{draftErr}</p>}
         </div>
       </PopoverContent>
     </Popover>
@@ -409,7 +425,12 @@ function SortableLeadRow({ lead, index, visibleCols, editingCell, highlighted, o
             ) : col.colType === "number" && rawVal !== "" && rawVal != null ? (
               <span className="font-medium tabular-nums">{Number(rawVal).toLocaleString()}</span>
             ) : col.colType === "date" && displayStr ? (
-              <span>{new Date(displayStr).toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "2-digit" })}</span>
+              (() => {
+                const d = new Date(displayStr);
+                return <span>{isNaN(d.getTime()) ? displayStr : d.toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "2-digit" })}</span>;
+              })()
+            ) : col.key === "contact" && displayStr ? (
+              <span className="truncate block">{formatPhoneNumber(displayStr)}</span>
             ) : (
               <span className="truncate block">{displayStr}</span>
             )}
@@ -442,9 +463,10 @@ function NewLeadRow({ visibleCols, onSave, onCancel }: {
   const firstInputKey = visibleCols.find(c => c.key !== "status")?.key ?? "";
 
   const handleChange = (fieldId: string, colKey: string, value: string) => {
-    setData(d => ({ ...d, [fieldId]: value }));
+    const finalValue = colKey === "contact" ? formatPhoneNumber(value) : value;
+    setData(d => ({ ...d, [fieldId]: finalValue }));
     // Clear error as soon as field is valid again
-    if (errors[colKey]) setErrors(e => ({ ...e, [colKey]: validateFieldValue(colKey, value) }));
+    if (errors[colKey]) setErrors(e => ({ ...e, [colKey]: validateFieldValue(colKey, finalValue) }));
   };
 
   const commit = () => {
