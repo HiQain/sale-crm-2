@@ -32,6 +32,10 @@ async function ensureSessionTable(): Promise<void> {
 
 const app: Express = express();
 
+// Trust the first proxy (Replit's reverse proxy) so cookies and
+// secure flags work correctly in the proxied environment.
+app.set("trust proxy", 1);
+
 app.use(
   pinoHttp({
     logger,
@@ -71,8 +75,9 @@ app.use(
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: process.env["NODE_ENV"] === "production",
+      secure: false, // handled by Replit's TLS termination proxy
       httpOnly: true,
+      sameSite: "lax",
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     },
   }),
