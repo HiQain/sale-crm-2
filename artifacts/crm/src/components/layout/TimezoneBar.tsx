@@ -37,7 +37,7 @@ export function TimezoneBar() {
       {ZONES.map((z, i) => (
         <span key={z.label} className="flex items-center">
           {i > 0 && <span className="mx-4 text-white/20">|</span>}
-          <span className="text-white/50 font-medium tracking-wider mr-1.5">{z.label}</span>
+          <span className="text-white font-medium tracking-wider mr-1.5">{z.label}</span>
           <span className="font-semibold text-white/90">{times[i]}</span>
         </span>
       ))}
