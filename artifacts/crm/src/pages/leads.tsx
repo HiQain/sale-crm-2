@@ -11,7 +11,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { useToast } from "@/hooks/use-toast";
 import { formatPhoneNumber, isValidPhoneNumber } from "@/lib/utils";
-import { StatCard, formatCurrency } from "@/components/ui/stat-card";
+import { formatCurrency } from "@/components/ui/stat-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -21,7 +21,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
 import {
-  LayoutGrid, Clock, CheckCircle2, DollarSign, TrendingUp,
   Search, Trash2, Columns, GripVertical, Plus, Pencil, Check, X, Settings2,
   Type, Hash, Calendar,
 } from "lucide-react";
@@ -250,30 +249,35 @@ function MultiValueCell({ values, colKey, inputType, onUpdate }: {
 
   return (
     <Popover open={open} onOpenChange={o => { setOpen(o); if (!o) { setEditIdx(null); setDraft(""); } }}>
-      <PopoverTrigger asChild>
-        {/* Trigger area — shows chips inline */}
-        <div
-          className="flex items-center flex-wrap gap-0.5 min-h-[22px] rounded px-0.5 cursor-pointer group hover:bg-muted/40 transition-colors"
-          onClick={() => setOpen(true)}
-          title="Click to manage values"
-        >
-          {values.length === 0 && (
-            <span className="text-xs text-muted-foreground/30 italic select-none">—</span>
-          )}
-          {values.slice(0, SHOW).map((v, i) => (
-            <span key={i}
-              className="inline-flex items-center bg-muted/70 border border-border/60 rounded-sm text-xs px-1.5 py-0 max-w-[100px] shrink-0">
-              <span className="truncate">{colKey === "contact" ? formatPhoneNumber(v) : v}</span>
-            </span>
-          ))}
-          {values.length > SHOW && (
-            <span className="text-[10px] font-semibold text-muted-foreground bg-muted/60 border border-border/40 rounded-sm px-1">
-              +{values.length - SHOW}
-            </span>
-          )}
-          <Plus className="w-3 h-3 ml-auto opacity-0 group-hover:opacity-50 transition-opacity shrink-0" />
-        </div>
-      </PopoverTrigger>
+      {/* Cell display — NOT a trigger; only the Plus button opens the popover */}
+      <div
+        className="flex items-center flex-wrap gap-0.5 min-h-[22px] rounded px-0.5 group hover:bg-muted/40 transition-colors"
+        title={values.join(", ") || undefined}
+      >
+        {values.length === 0 && (
+          <span className="text-xs text-muted-foreground/30 italic select-none">—</span>
+        )}
+        {values.slice(0, SHOW).map((v, i) => (
+          <span key={i}
+            className="inline-flex items-center bg-muted/70 border border-border/60 rounded-sm text-xs px-1.5 py-0 max-w-[100px] shrink-0">
+            <span className="truncate">{colKey === "contact" ? formatPhoneNumber(v) : v}</span>
+          </span>
+        ))}
+        {values.length > SHOW && (
+          <span className="text-[10px] font-semibold text-muted-foreground bg-muted/60 border border-border/40 rounded-sm px-1">
+            +{values.length - SHOW}
+          </span>
+        )}
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            className="ml-auto opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity shrink-0 rounded p-0.5 hover:bg-muted"
+            title="Add / manage values"
+          >
+            <Plus className="w-3 h-3" />
+          </button>
+        </PopoverTrigger>
+      </div>
 
       <PopoverContent className="w-64 p-3 shadow-xl" align="start" side="bottom"
         onOpenAutoFocus={e => { e.preventDefault(); setTimeout(() => addRef.current?.focus(), 50); }}>
@@ -440,7 +444,7 @@ function SortableLeadRow({ lead, index, visibleCols, editingCell, highlighted, o
         if (isMulti) {
           return (
             <TableCell key={col.key}
-              className="px-1 py-1 border-r border-border/30 last:border-r-0 max-w-[180px]">
+              className="px-1 py-0.5 border-r border-border/30 last:border-r-0 max-w-[180px]">
               <MultiValueCell
                 values={getLeadMultiValues(lead, col.key)}
                 colKey={col.key}
@@ -452,24 +456,25 @@ function SortableLeadRow({ lead, index, visibleCols, editingCell, highlighted, o
         }
 
         // ── Regular / single-value cell ──────────────────────────────────────
+        const isCompact = col.key === "followUp" || col.key === "leadValue" || col.key === "status";
         return (
           <TableCell key={col.key}
-            className="px-1 py-1.5 text-sm border-r border-border/30 last:border-r-0 max-w-[160px]"
+            className={`px-1 border-r border-border/30 last:border-r-0 max-w-[160px] ${isCompact ? "py-0.5 text-xs" : "py-1 text-sm"}`}
             onDoubleClick={() => !isEditing && onCellDoubleClick(lead.id, col.key, displayStr)}
-            title="Double-click to edit">
+            title={!isEditing && displayStr ? displayStr : undefined}>
             {isEditing ? (
               <CellEditor colKey={col.key} colType={col.colType} inputType={col.inputType} value={displayStr}
                 onSave={v => onCellSave(lead.id, col, v)} onCancel={onCellCancel} />
             ) : col.key === "status" ? (
               <LeadStatusBadge status={lead.status} />
             ) : col.key === "leadValue" ? (
-              <span className="font-medium">{formatCurrency(lead.leadValue)}</span>
+              <span className="font-medium tabular-nums">{formatCurrency(lead.leadValue)}</span>
             ) : col.colType === "number" && rawVal !== "" && rawVal != null ? (
               <span className="font-medium tabular-nums">{Number(rawVal).toLocaleString()}</span>
             ) : col.colType === "date" && displayStr ? (
               (() => {
                 const d = new Date(displayStr);
-                return <span>{isNaN(d.getTime()) ? displayStr : d.toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "2-digit" })}</span>;
+                return <span title={displayStr}>{isNaN(d.getTime()) ? displayStr : d.toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "2-digit" })}</span>;
               })()
             ) : col.key === "contact" && displayStr ? (
               <span className="truncate block">{formatPhoneNumber(displayStr)}</span>
@@ -787,7 +792,7 @@ export default function Leads() {
     queryFn: () => api.fetchLeads(search),
   });
 
-  const { data: stats }       = useQuery({ queryKey: ["leads-stats"],   queryFn: api.fetchStats });
+  // stats query removed — stats cards UI was removed per design update
   const { data: savedPrefs }  = useQuery({ queryKey: ["leads-prefs"],   queryFn: api.fetchPrefs });
 
   const { data: customColRecords = [] } = useQuery<CustomColRecord[]>({
@@ -986,9 +991,9 @@ export default function Leads() {
         .row-flash { animation: flash-highlight 2s ease-out forwards; }
       `}</style>
 
-      <div className="space-y-5">
+      <div className="flex flex-col" style={{ height: "calc(100vh - 154px)" }}>
         {/* Header */}
-        <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center justify-between gap-4 flex-wrap px-4 pb-2">
           <h1 className="text-2xl font-bold tracking-tight">Global Leads Database</h1>
           <div className="flex items-center gap-2">
 
@@ -1039,18 +1044,8 @@ export default function Leads() {
           </div>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          <StatCard icon={<LayoutGrid   className="w-5 h-5" />} label="Total Leads"    value={stats?.totalLeads ?? 0} />
-          <StatCard icon={<Clock        className="w-5 h-5" />} label="Active Leads"   value={stats?.activeLeads ?? 0}           iconBg="bg-amber-100 text-amber-600" />
-          <StatCard icon={<CheckCircle2 className="w-5 h-5" />} label="Paid Leads"    value={stats?.paidLeads ?? 0}             iconBg="bg-green-100 text-green-600" />
-          <StatCard icon={<DollarSign   className="w-5 h-5" />} label="Paid Revenue"  value={formatCurrency(stats?.paidRevenue ?? 0)}  iconBg="bg-green-100 text-green-700" />
-          <StatCard icon={<TrendingUp   className="w-5 h-5" />} label="Total Revenue" value={formatCurrency(stats?.totalRevenue ?? 0)} iconBg="bg-blue-100 text-blue-600" />
-        </div>
-
-        {/* Table card — fixed height so the Add row button stays visible */}
-        <div className="bg-card border border-border rounded-lg overflow-hidden shadow-sm flex flex-col"
-             style={{ height: "calc(100vh - 340px)", minHeight: "420px" }}>
+        {/* Table card — fills remaining height */}
+        <div className="bg-card border border-border rounded-lg overflow-hidden shadow-sm flex flex-col flex-1 min-h-0">
 
           {/* Scrollable table body */}
           <div className="flex-1 overflow-auto" ref={tableScrollRef}>

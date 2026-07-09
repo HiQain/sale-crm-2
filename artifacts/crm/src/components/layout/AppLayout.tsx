@@ -14,7 +14,7 @@ export function AppLayout({ children, requireAdmin = false }: AppLayoutProps) {
       <div className="flex flex-col min-h-screen bg-background">
         <TopNav />
         <TimezoneBar />
-        <main className="flex-1 p-8">
+        <main className="flex-1 py-4 px-0">
           {children}
         </main>
       </div>
