@@ -56,7 +56,14 @@ pnpm --filter @workspace/db run push
 
 ## Sample Data
 
-Pre-seeded with 5 companies, 5 contacts, 5 leads, 5 deals, and 5 tasks across various pipeline stages.
+Seeded with 5 companies, 5 contacts, 5 leads, 5 deals, and 5 tasks across various pipeline stages.
+Re-run anytime with:
+
+```bash
+pnpm --filter @workspace/scripts run seed
+```
+
+The seed script (`scripts/src/seed/seed.ts`) upserts the admin user by email (safe to re-run) and inserts fresh sample rows for companies/contacts/leads/deals/tasks each time it's run.
 
 ## User Preferences
 
