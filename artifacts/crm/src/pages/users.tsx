@@ -196,7 +196,7 @@ export default function Users() {
   ];
 
   return (
-    <div className="h-[calc(100vh-8rem)]">
+    <div className="h-[calc(100vh-8rem)] px-[10px]">
       <DataGrid
         title="Team Members"
         data={filtered}
