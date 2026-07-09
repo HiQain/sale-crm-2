@@ -1,72 +1,63 @@
 # NexusCRM
 
-A full-stack CRM application for managing leads, deals, companies, contacts, tasks, and billing. Built as a pnpm monorepo with a React frontend and Express API backend.
+A full-stack CRM application for lead management, client journeys, and billing tracking with role-based access control.
 
 ## Stack
 
-- **Frontend**: React 19, Vite, Tailwind CSS 4, Radix UI (shadcn/ui), Wouter (routing), TanStack Query
-- **Backend**: Node.js, Express, Pino logging, express-session with PostgreSQL session store
-- **Database**: PostgreSQL via Drizzle ORM
-- **Auth**: Session-based (bcryptjs passwords, PostgreSQL session store)
+- **Frontend**: React + Vite + Tailwind CSS + shadcn/ui (`artifacts/crm`)
+- **Backend**: Express API server (`artifacts/api-server`)
+- **Database**: PostgreSQL via Replit's built-in database, Drizzle ORM (`lib/db`)
+- **Auth**: Session-based (cookie), bcrypt password hashing
 
-## Project Structure
+## How to run
 
-```
-artifacts/
-  crm/          # React + Vite frontend (preview path: /)
-  api-server/   # Express API server (preview path: /api)
-lib/
-  db/           # Drizzle schema + DB client (@workspace/db)
-  api-client-react/  # Generated API client with React Query hooks
-  api-zod/      # Zod schemas for API contract
-  api-spec/     # OpenAPI spec
-```
+All workflows are managed by Replit. The three services start automatically:
 
-## Running the Project
+| Service | Workflow | Port |
+|---------|----------|------|
+| CRM frontend | `artifacts/crm: web` | 22444 |
+| API server | `artifacts/api-server: API Server` | 8080 |
+| Mockup sandbox | `artifacts/mockup-sandbox: Component Preview Server` | auto |
 
-Three workflows run automatically:
-- **CRM frontend** — `pnpm --filter @workspace/crm run dev` (preview path `/`)
-- **API server** — `pnpm --filter @workspace/api-server run dev` (preview path `/api`)
-- **Canvas / Component Preview Server** — `pnpm --filter @workspace/mockup-sandbox run dev` (preview path `/__mockup`)
+The preview proxy routes `/api/*` to the API server and everything else to the CRM frontend.
 
-Setup already done: `pnpm install`, `pnpm --filter @workspace/db run push` (applies Drizzle schema to Postgres). `DATABASE_URL` and `SESSION_SECRET` are already configured.
-
-## Environment Variables
-
-| Variable | Required | Notes |
-|---|---|---|
-| `DATABASE_URL` | Yes | Auto-set by Replit PostgreSQL |
-| `SESSION_SECRET` | Yes | Set in Replit Secrets |
-| `PORT` | Yes | Auto-set per artifact |
-| `BASE_PATH` | Yes | Auto-set per artifact |
-
-## Database
-
-Schema is managed with Drizzle Kit. To push schema changes:
-
-```bash
-pnpm --filter @workspace/db run push
-```
-
-## Admin Account
-
-- **Email**: admin@hiqain.com
-- **Password**: password
-- **Role**: admin
-
-## Sample Data
-
-Seeded with 5 companies, 5 contacts, 5 leads, 5 deals, and 5 tasks across various pipeline stages.
-Re-run anytime with:
+## Seeding the database
 
 ```bash
 pnpm --filter @workspace/scripts run seed
 ```
 
-The seed script (`scripts/src/seed/seed.ts`) upserts the admin user by email (safe to re-run) and inserts fresh sample rows for companies/contacts/leads/deals/tasks each time it's run.
+This creates the admin user, sample leads, companies, contacts, deals, tasks, client journeys, and billings.
 
-## User Preferences
+## Admin credentials
 
-- Keep the existing monorepo structure (artifacts/ + lib/)
-- Use pnpm workspace commands (`pnpm --filter <package>`)
-- Drizzle ORM for all database access — no raw SQL in application code
+- **Email**: admin@hiqain.com
+- **Password**: set via `pnpm --filter @workspace/scripts run seed` (dev default — change before deploying)
+
+## Project structure
+
+```
+artifacts/
+  crm/          – React frontend
+  api-server/   – Express REST API
+  mockup-sandbox/ – Design/component preview tool
+lib/
+  db/           – Drizzle schema + migrations
+  api-client-react/ – Generated React Query hooks
+  api-spec/     – OpenAPI spec + orval codegen config
+  api-zod/      – Generated Zod validators
+scripts/
+  src/seed/     – Database seed script
+```
+
+## Modules
+
+- **Leads** (`/admin/leads`) – Lead pipeline with custom columns
+- **Client Journeys** (`/admin/client-journeys`) – Client lifecycle tracking
+- **Billings** (`/admin/billings`) – Invoice and payment records
+- **Users** (`/admin/users`) – User management (admin only)
+
+## User preferences
+
+- Use `pnpm` for all package management (never npm or yarn)
+- Keep existing project structure — do not restructure or migrate
