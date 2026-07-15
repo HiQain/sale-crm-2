@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { db, contactsTable, companiesTable, usersTable } from "@workspace/db";
-import { eq, ilike, and, sql } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { requireAuth } from "../lib/auth";
+import { containsCI, extractInsertId } from "../lib/mysql";
 
 const router = Router();
 
@@ -16,7 +17,7 @@ router.get("/contacts", requireAuth, async (req, res) => {
     }
     if (search) {
       conditions.push(
-        sql`(${ilike(contactsTable.firstName, `%${search}%`)} OR ${ilike(contactsTable.lastName, `%${search}%`)} OR ${ilike(contactsTable.email, `%${search}%`)})`
+        sql`(${containsCI(contactsTable.firstName, search)} OR ${containsCI(contactsTable.lastName, search)} OR ${containsCI(contactsTable.email, search)})`
       );
     }
     if (status) conditions.push(eq(contactsTable.status, status));
@@ -61,11 +62,10 @@ router.post("/contacts", requireAuth, async (req, res) => {
       res.status(400).json({ error: "firstName and lastName are required" });
       return;
     }
-    const [contact] = await db
+    const insertResult = await db
       .insert(contactsTable)
-      .values({ firstName, lastName, email, phone, title, companyId, status: status ?? "lead", source, tags, notes, ownerId })
-      .returning();
-    const full = await getContactWithJoins(contact.id);
+      .values({ firstName, lastName, email, phone, title, companyId, status: status ?? "lead", source, tags, notes, ownerId });
+    const full = await getContactWithJoins(extractInsertId(insertResult));
     res.status(201).json(full);
   } catch (err) {
     req.log.error({ err }, "Create contact error");

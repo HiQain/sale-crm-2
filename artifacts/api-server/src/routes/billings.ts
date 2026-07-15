@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { db, billingsTable } from "@workspace/db";
-import { eq, ilike, and, sql, count } from "drizzle-orm";
+import { eq, and, sql, count } from "drizzle-orm";
 import { requireAuth } from "../lib/auth";
+import { containsCI, extractInsertId } from "../lib/mysql";
 
 const router = Router();
 
@@ -16,7 +17,7 @@ router.get("/billings/stats", requireAuth, async (req, res) => {
     const [totals] = await db
       .select({
         totalBillings: count(billingsTable.id),
-        paymentsReceived: sql<number>`count(*) filter (where ${billingsTable.paymentDate} is not null)`,
+        paymentsReceived: sql<number>`coalesce(sum(case when ${billingsTable.paymentDate} is not null then 1 else 0 end), 0)`,
         grossAmount: sql<number>`coalesce(sum(${billingsTable.amount}), 0)`,
         netCurrency: sql<number>`coalesce(sum(${billingsTable.netCurrency}), 0)`,
       })
@@ -45,7 +46,7 @@ router.get("/billings", requireAuth, async (req, res) => {
     }
     if (search) {
       conditions.push(
-        sql`(${ilike(billingsTable.clientName, `%${search}%`)} OR ${ilike(billingsTable.businessName, `%${search}%`)} OR ${ilike(billingsTable.service, `%${search}%`)})`
+        sql`(${containsCI(billingsTable.clientName, search)} OR ${containsCI(billingsTable.businessName, search)} OR ${containsCI(billingsTable.service, search)})`
       );
     }
     const billings = await db
@@ -64,7 +65,7 @@ router.get("/billings", requireAuth, async (req, res) => {
 router.post("/billings", requireAuth, async (req, res) => {
   try {
     const { invoiceDate, paymentDate, clientName, businessName, paymentMethod, service, amount, feeDeducted, netCurrency, leadAssignee } = req.body;
-    const [billing] = await db
+    const insertResult = await db
       .insert(billingsTable)
       .values({
         invoiceDate: invoiceDate ? new Date(invoiceDate) : undefined,
@@ -75,8 +76,8 @@ router.post("/billings", requireAuth, async (req, res) => {
         netCurrency: netCurrency ?? 0,
         leadAssignee,
         ownerId: req.session.userId,
-      })
-      .returning();
+      });
+    const [billing] = await db.select().from(billingsTable).where(eq(billingsTable.id, extractInsertId(insertResult))).limit(1);
     res.status(201).json(billing);
   } catch (err) {
     req.log.error({ err }, "Create billing error");
@@ -96,7 +97,8 @@ router.patch("/billings/:id", requireAuth, async (req, res) => {
           ? new Date(req.body[f]) : req.body[f];
       }
     }
-    const [billing] = await db.update(billingsTable).set(updates).where(eq(billingsTable.id, id)).returning();
+    await db.update(billingsTable).set(updates).where(eq(billingsTable.id, id));
+    const [billing] = await db.select().from(billingsTable).where(eq(billingsTable.id, id)).limit(1);
     if (!billing) { res.status(404).json({ error: "Not found" }); return; }
     res.json(billing);
   } catch (err) {

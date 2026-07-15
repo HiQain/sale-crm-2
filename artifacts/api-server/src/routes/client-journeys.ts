@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { db, clientJourneysTable } from "@workspace/db";
-import { eq, ilike, and, sql, count } from "drizzle-orm";
+import { eq, and, sql, count } from "drizzle-orm";
 import { requireAuth } from "../lib/auth";
+import { containsCI, extractInsertId } from "../lib/mysql";
 
 const router = Router();
 
@@ -16,8 +17,8 @@ router.get("/client-journeys/stats", requireAuth, async (req, res) => {
     const [totals] = await db
       .select({
         totalJourneys: count(clientJourneysTable.id),
-        paidJourneys: sql<number>`count(*) filter (where ${clientJourneysTable.status} = 'paid')`,
-        paidRevenue: sql<number>`coalesce(sum(${clientJourneysTable.paidAmount}) filter (where ${clientJourneysTable.status} = 'paid'), 0)`,
+        paidJourneys: sql<number>`coalesce(sum(case when ${clientJourneysTable.status} = 'paid' then 1 else 0 end), 0)`,
+        paidRevenue: sql<number>`coalesce(sum(case when ${clientJourneysTable.status} = 'paid' then ${clientJourneysTable.paidAmount} else 0 end), 0)`,
         totalRevenue: sql<number>`coalesce(sum(${clientJourneysTable.total}), 0)`,
       })
       .from(clientJourneysTable)
@@ -45,7 +46,7 @@ router.get("/client-journeys", requireAuth, async (req, res) => {
     }
     if (search) {
       conditions.push(
-        sql`(${ilike(clientJourneysTable.clientName, `%${search}%`)} OR ${ilike(clientJourneysTable.businessName, `%${search}%`)} OR ${ilike(clientJourneysTable.email, `%${search}%`)})`
+        sql`(${containsCI(clientJourneysTable.clientName, search)} OR ${containsCI(clientJourneysTable.businessName, search)} OR ${containsCI(clientJourneysTable.email, search)})`
       );
     }
     const journeys = await db
@@ -64,7 +65,7 @@ router.get("/client-journeys", requireAuth, async (req, res) => {
 router.post("/client-journeys", requireAuth, async (req, res) => {
   try {
     const { date, clientName, businessName, creditCard, email, phone, sales, leadAssignee, service, status, paidAmount, balance, total } = req.body;
-    const [journey] = await db
+    const insertResult = await db
       .insert(clientJourneysTable)
       .values({
         date: date ? new Date(date) : undefined,
@@ -74,8 +75,8 @@ router.post("/client-journeys", requireAuth, async (req, res) => {
         balance: balance ?? 0,
         total: total ?? 0,
         ownerId: req.session.userId,
-      })
-      .returning();
+      });
+    const [journey] = await db.select().from(clientJourneysTable).where(eq(clientJourneysTable.id, extractInsertId(insertResult))).limit(1);
     res.status(201).json(journey);
   } catch (err) {
     req.log.error({ err }, "Create client journey error");
@@ -94,7 +95,8 @@ router.patch("/client-journeys/:id", requireAuth, async (req, res) => {
         updates[f] = f === "date" && req.body[f] ? new Date(req.body[f]) : req.body[f];
       }
     }
-    const [journey] = await db.update(clientJourneysTable).set(updates).where(eq(clientJourneysTable.id, id)).returning();
+    await db.update(clientJourneysTable).set(updates).where(eq(clientJourneysTable.id, id));
+    const [journey] = await db.select().from(clientJourneysTable).where(eq(clientJourneysTable.id, id)).limit(1);
     if (!journey) { res.status(404).json({ error: "Not found" }); return; }
     res.json(journey);
   } catch (err) {

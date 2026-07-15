@@ -1,27 +1,34 @@
 import { Router } from "express";
-import { db, leadsTable, usersTable } from "@workspace/db";
-import { eq, ilike, and, sql, sum, count, asc } from "drizzle-orm";
+import { db, leadsTable } from "@workspace/db";
+import { eq, and, sql, count } from "drizzle-orm";
 import { requireAuth } from "../lib/auth";
+import { containsCI, extractInsertId } from "../lib/mysql";
 
 const router = Router();
 
-// Columns whose primary DB field should stay in sync with multiValues[key][0]
-const MULTI_SYNC_COLS = new Set(["contact", "email", "businessName", "businessOwner", "service", "response"]);
+const MULTI_SYNC_COLS = new Set([
+  "contact",
+  "email",
+  "businessName",
+  "businessOwner",
+  "service",
+  "response",
+]);
 
-// GET /api/leads/stats
 router.get("/leads/stats", requireAuth, async (req, res) => {
   try {
-    const conditions = req.session.role !== "admin"
-      ? [eq(leadsTable.ownerId, req.session.userId!)]
-      : [];
+    const conditions =
+      req.session.role !== "admin"
+        ? [eq(leadsTable.ownerId, req.session.userId!)]
+        : [];
     const where = conditions.length > 0 ? and(...conditions) : undefined;
 
     const [totals] = await db
       .select({
         totalLeads: count(leadsTable.id),
-        activeLeads: sql<number>`count(*) filter (where ${leadsTable.status} != 'paid')`,
-        paidLeads: sql<number>`count(*) filter (where ${leadsTable.status} = 'paid')`,
-        paidRevenue: sql<number>`coalesce(sum(${leadsTable.leadValue}) filter (where ${leadsTable.status} = 'paid'), 0)`,
+        activeLeads: sql<number>`coalesce(sum(case when ${leadsTable.status} != 'paid' then 1 else 0 end), 0)`,
+        paidLeads: sql<number>`coalesce(sum(case when ${leadsTable.status} = 'paid' then 1 else 0 end), 0)`,
+        paidRevenue: sql<number>`coalesce(sum(case when ${leadsTable.status} = 'paid' then ${leadsTable.leadValue} else 0 end), 0)`,
         totalRevenue: sql<number>`coalesce(sum(${leadsTable.leadValue}), 0)`,
       })
       .from(leadsTable)
@@ -40,7 +47,6 @@ router.get("/leads/stats", requireAuth, async (req, res) => {
   }
 });
 
-// GET /api/leads
 router.get("/leads", requireAuth, async (req, res) => {
   try {
     const { search } = req.query as Record<string, string>;
@@ -50,14 +56,16 @@ router.get("/leads", requireAuth, async (req, res) => {
     }
     if (search) {
       conditions.push(
-        sql`(${ilike(leadsTable.contact, `%${search}%`)} OR ${ilike(leadsTable.email, `%${search}%`)} OR ${ilike(leadsTable.businessName, `%${search}%`)})`
+        sql`(${containsCI(leadsTable.contact, search)} OR ${containsCI(leadsTable.email, search)} OR ${containsCI(leadsTable.businessName, search)})`,
       );
     }
+
     const leads = await db
       .select()
       .from(leadsTable)
       .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(leadsTable.createdAt);
+
     res.json(leads);
   } catch (err) {
     req.log.error({ err }, "List leads error");
@@ -65,34 +73,53 @@ router.get("/leads", requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/leads
 router.post("/leads", requireAuth, async (req, res) => {
   try {
     const {
-      contact, email, businessOwner, businessName, service, response,
-      followUp, leadValue, leadAssignee, status, multiValues,
+      contact,
+      email,
+      businessOwner,
+      businessName,
+      service,
+      response,
+      followUp,
+      leadValue,
+      leadAssignee,
+      status,
+      multiValues,
     } = req.body;
 
-    // Build initial multiValues — bootstrap from primary columns if not provided
-    const mv: Record<string, string[]> = typeof multiValues === "object" && multiValues ? { ...multiValues } : {};
-    if (contact  && !mv.contact)      mv.contact      = [contact];
-    if (email    && !mv.email)        mv.email        = [email];
-    if (businessName  && !mv.businessName)  mv.businessName  = [businessName];
+    const mv: Record<string, string[]> =
+      typeof multiValues === "object" && multiValues ? { ...multiValues } : {};
+    if (contact && !mv.contact) mv.contact = [contact];
+    if (email && !mv.email) mv.email = [email];
+    if (businessName && !mv.businessName) mv.businessName = [businessName];
     if (businessOwner && !mv.businessOwner) mv.businessOwner = [businessOwner];
-    if (service  && !mv.service)      mv.service      = [service];
-    if (response && !mv.response)     mv.response     = [response];
+    if (service && !mv.service) mv.service = [service];
+    if (response && !mv.response) mv.response = [response];
+
+    const insertResult = await db.insert(leadsTable).values({
+      contact,
+      email,
+      businessOwner,
+      businessName,
+      service,
+      response,
+      followUp,
+      leadValue: leadValue ?? 0,
+      leadAssignee,
+      status: status ?? "pending",
+      ownerId: req.session.userId,
+      multiValues: mv,
+      customData: {},
+    });
 
     const [lead] = await db
-      .insert(leadsTable)
-      .values({
-        contact, email, businessOwner, businessName, service, response, followUp,
-        leadValue: leadValue ?? 0,
-        leadAssignee,
-        status: status ?? "pending",
-        ownerId: req.session.userId,
-        multiValues: mv,
-      })
-      .returning();
+      .select()
+      .from(leadsTable)
+      .where(eq(leadsTable.id, extractInsertId(insertResult)))
+      .limit(1);
+
     res.status(201).json(lead);
   } catch (err) {
     req.log.error({ err }, "Create lead error");
@@ -100,39 +127,73 @@ router.post("/leads", requireAuth, async (req, res) => {
   }
 });
 
-// PATCH /api/leads/:id
 router.patch("/leads/:id", requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params["id"] as string);
-    const fields = ["contact","email","businessOwner","businessName","service","response","followUp","leadValue","leadAssignee","status"];
+    const fields = [
+      "contact",
+      "email",
+      "businessOwner",
+      "businessName",
+      "service",
+      "response",
+      "followUp",
+      "leadValue",
+      "leadAssignee",
+      "status",
+    ];
     const updates: Record<string, unknown> = { updatedAt: new Date() };
-    for (const f of fields) if (req.body[f] !== undefined) updates[f] = req.body[f];
-
-    // Merge custom_data patch (if provided) with existing JSONB
-    if (req.body.customData && typeof req.body.customData === "object") {
-      updates.customData = sql`custom_data || ${JSON.stringify(req.body.customData)}::jsonb`;
+    for (const field of fields) {
+      if (req.body[field] !== undefined) {
+        updates[field] = req.body[field];
+      }
     }
 
-    // Merge multi_values patch — also sync primary columns
+    const [existingLead] = await db
+      .select()
+      .from(leadsTable)
+      .where(eq(leadsTable.id, id))
+      .limit(1);
+
+    if (!existingLead) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+
+    if (req.body.customData && typeof req.body.customData === "object") {
+      updates.customData = {
+        ...((existingLead.customData as Record<string, unknown> | null) ?? {}),
+        ...(req.body.customData as Record<string, unknown>),
+      };
+    }
+
     if (req.body.multiValues && typeof req.body.multiValues === "object") {
       const mv = req.body.multiValues as Record<string, string[]>;
-      // Merge the new arrays into the existing JSONB
-      updates.multiValues = sql`COALESCE(multi_values, '{}') || ${JSON.stringify(mv)}::jsonb`;
-      // Sync primary columns to first value of each updated key
+      updates.multiValues = {
+        ...((existingLead.multiValues as Record<string, string[]> | null) ?? {}),
+        ...mv,
+      };
+
       for (const [key, vals] of Object.entries(mv)) {
         if (MULTI_SYNC_COLS.has(key)) {
-          // Convert camelCase keys to the Drizzle field names used in updates
           const fieldMap: Record<string, string> = {
             businessName: "businessName",
             businessOwner: "businessOwner",
           };
-          updates[fieldMap[key] ?? key] = (Array.isArray(vals) && vals[0]) ? vals[0] : null;
+          updates[fieldMap[key] ?? key] =
+            Array.isArray(vals) && vals[0] ? vals[0] : null;
         }
       }
     }
 
-    const [lead] = await db.update(leadsTable).set(updates as any).where(eq(leadsTable.id, id)).returning();
-    if (!lead) { res.status(404).json({ error: "Not found" }); return; }
+    await db.update(leadsTable).set(updates as never).where(eq(leadsTable.id, id));
+
+    const [lead] = await db
+      .select()
+      .from(leadsTable)
+      .where(eq(leadsTable.id, id))
+      .limit(1);
+
     res.json(lead);
   } catch (err) {
     req.log.error({ err }, "Update lead error");
@@ -140,7 +201,6 @@ router.patch("/leads/:id", requireAuth, async (req, res) => {
   }
 });
 
-// DELETE /api/leads/:id
 router.delete("/leads/:id", requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params["id"] as string);

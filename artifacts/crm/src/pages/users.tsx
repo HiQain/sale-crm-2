@@ -138,6 +138,56 @@ export default function Users() {
     });
   };
 
+  const handleInlineEdit = (row: User, key: keyof User, value: string) => {
+    const trimmed = value.trim();
+    const payload: Record<string, unknown> = {};
+
+    if (key === "name") {
+      if (!trimmed) {
+        toast({ title: "Error", description: "Name is required.", variant: "destructive" });
+        return;
+      }
+      payload.name = trimmed;
+    } else if (key === "email") {
+      if (!trimmed) {
+        toast({ title: "Error", description: "Email is required.", variant: "destructive" });
+        return;
+      }
+      payload.email = trimmed;
+    } else if (key === "role") {
+      const normalized = trimmed.toLowerCase();
+      if (normalized !== "admin" && normalized !== "user") {
+        toast({ title: "Error", description: "Role must be admin or user.", variant: "destructive" });
+        return;
+      }
+      payload.role = normalized;
+    } else if (key === "isActive") {
+      const normalized = trimmed.toLowerCase();
+      if (["active", "true", "yes", "1"].includes(normalized)) {
+        payload.isActive = true;
+      } else if (["inactive", "false", "no", "0"].includes(normalized)) {
+        payload.isActive = false;
+      } else {
+        toast({ title: "Error", description: "Status must be Active or Inactive.", variant: "destructive" });
+        return;
+      }
+    } else {
+      return;
+    }
+
+    updateUser.mutate({ id: row.id, data: payload as any }, {
+      onSuccess: (updated) => {
+        queryClient.setQueryData(queryKey, (old: User[]) =>
+          old?.map(u => u.id === updated.id ? updated : u)
+        );
+        toast({ title: "Saved", description: `${updated.name} updated.` });
+      },
+      onError: () => {
+        toast({ title: "Error", description: "Failed to update user.", variant: "destructive" });
+      },
+    });
+  };
+
   const filtered = users.filter(u =>
     u.name.toLowerCase().includes(search.toLowerCase()) ||
     u.email.toLowerCase().includes(search.toLowerCase())
@@ -203,6 +253,7 @@ export default function Users() {
         columns={columns}
         keyExtractor={r => r.id}
         isLoading={isLoading}
+        onEdit={handleInlineEdit}
         onDelete={handleDelete}
         onSearch={setSearch}
         searchPlaceholder="Search users..."
@@ -267,7 +318,7 @@ export default function Users() {
       </Dialog>
 
       {/* ── Edit User Dialog ── */}
-      <Dialog open={!!editUser} onOpenChange={(open) => !open && setEditUser(null)}>
+      <Dialog open={!!editUser} onOpenChange={(open: boolean) => !open && setEditUser(null)}>
         <DialogContent className="sm:max-w-[420px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">

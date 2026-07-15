@@ -2,6 +2,8 @@ import { Switch, Route, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { AgGridProvider } from "ag-grid-react";
+import { AllCommunityModule } from "ag-grid-community";
 
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -77,12 +79,14 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <AuthProvider>
-          <div className="font-sans text-foreground antialiased min-h-screen">
-            <Router />
-          </div>
-          <Toaster />
-        </AuthProvider>
+        <AgGridProvider modules={[AllCommunityModule]}>
+          <AuthProvider>
+            <div className="font-sans text-foreground antialiased min-h-screen">
+              <Router />
+            </div>
+            <Toaster />
+          </AuthProvider>
+        </AgGridProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );

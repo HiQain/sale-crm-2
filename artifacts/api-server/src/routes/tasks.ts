@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, tasksTable, contactsTable, dealsTable, usersTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../lib/auth";
+import { extractInsertId } from "../lib/mysql";
 
 const router = Router();
 
@@ -55,11 +56,10 @@ router.post("/tasks", requireAuth, async (req, res) => {
   try {
     const { title, description, status, priority, dueDate, assigneeId, contactId, dealId } = req.body;
     if (!title) { res.status(400).json({ error: "title is required" }); return; }
-    const [task] = await db
+    const insertResult = await db
       .insert(tasksTable)
-      .values({ title, description, status: status ?? "todo", priority: priority ?? "medium", dueDate, assigneeId, contactId, dealId })
-      .returning();
-    const full = await getTaskWithJoins(task.id);
+      .values({ title, description, status: status ?? "todo", priority: priority ?? "medium", dueDate, assigneeId, contactId, dealId });
+    const full = await getTaskWithJoins(extractInsertId(insertResult));
     res.status(201).json(full);
   } catch (err) {
     req.log.error({ err }, "Create task error");

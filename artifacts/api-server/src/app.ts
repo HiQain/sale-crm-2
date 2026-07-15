@@ -2,35 +2,63 @@ import express, { type Express } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import session from "express-session";
-import connectPgSimple from "connect-pg-simple";
+import path from "node:path";
+import { existsSync } from "node:fs";
 import { pool } from "@workspace/db";
+import MySQLStoreFactory from "express-mysql-session";
 import router from "./routes";
 import { logger } from "./lib/logger";
 
-const PgSession = connectPgSimple(session);
+const MySQLStore = MySQLStoreFactory(session);
 
-// Ensure the session table exists at startup (connect-pg-simple's
-// createTableIfMissing reads from a file path that breaks when bundled).
+function getSessionStoreOptions() {
+  const databaseUrl = process.env["DATABASE_URL"];
+  if (!databaseUrl) {
+    throw new Error("DATABASE_URL environment variable is required");
+  }
+
+  const parsed = new URL(databaseUrl);
+
+  if (parsed.protocol !== "mysql:") {
+    throw new Error(`Unsupported DATABASE_URL protocol: ${parsed.protocol}`);
+  }
+
+  return {
+    host: parsed.hostname,
+    port: parsed.port ? Number(parsed.port) : 3306,
+    user: decodeURIComponent(parsed.username),
+    password: decodeURIComponent(parsed.password),
+    database: parsed.pathname.replace(/^\//, ""),
+  };
+}
+
 async function ensureSessionTable(): Promise<void> {
-  const client = await pool.connect();
+  const connection = await pool.getConnection();
   try {
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS "user_sessions" (
-        "sid"    varchar     NOT NULL COLLATE "default",
-        "sess"   json        NOT NULL,
-        "expire" timestamp(6) NOT NULL,
-        CONSTRAINT "session_pkey" PRIMARY KEY ("sid") NOT DEFERRABLE INITIALLY IMMEDIATE
-      ) WITH (OIDS=FALSE)
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS user_sessions (
+        session_id varchar(128) NOT NULL,
+        expires int unsigned NOT NULL,
+        data mediumtext,
+        PRIMARY KEY (session_id)
+      )
     `);
-    await client.query(
-      `CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON "user_sessions" ("expire")`
-    );
+    await connection.query(
+      `CREATE INDEX idx_user_sessions_expires ON user_sessions (expires)`
+    ).catch((error: unknown) => {
+      const err = error as { code?: string };
+      if (err.code !== "ER_DUP_KEYNAME") {
+        throw error;
+      }
+    });
   } finally {
-    client.release();
+    connection.release();
   }
 }
 
 const app: Express = express();
+const publicDir = path.resolve(globalThis.__dirname ?? process.cwd(), "public");
+const hasBuiltFrontend = existsSync(path.join(publicDir, "index.html"));
 
 // Trust the first proxy (Replit's reverse proxy) so cookies and
 // secure flags work correctly in the proxied environment.
@@ -67,9 +95,17 @@ const resolvedSecret = sessionSecret ?? "crm-dev-secret-do-not-use-in-production
 
 app.use(
   session({
-    store: new PgSession({
-      pool,
-      tableName: "user_sessions",
+    store: new MySQLStore({
+      ...getSessionStoreOptions(),
+      createDatabaseTable: false,
+      schema: {
+        tableName: "user_sessions",
+        columnNames: {
+          session_id: "session_id",
+          expires: "expires",
+          data: "data",
+        },
+      },
     }),
     secret: resolvedSecret,
     resave: false,
@@ -84,6 +120,19 @@ app.use(
 );
 
 app.use("/api", router);
+
+if (hasBuiltFrontend) {
+  app.use(express.static(publicDir));
+
+  app.get("*", (req, res, next) => {
+    if (req.path.startsWith("/api")) {
+      next();
+      return;
+    }
+
+    res.sendFile(path.join(publicDir, "index.html"));
+  });
+}
 
 export { ensureSessionTable };
 export default app;

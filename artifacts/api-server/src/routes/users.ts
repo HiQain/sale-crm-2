@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { requireAdmin, requireAuth, hashPassword } from "../lib/auth";
+import { extractInsertId } from "../lib/mysql";
 
 const router = Router();
 
@@ -37,7 +38,7 @@ router.post("/users", requireAdmin, async (req, res) => {
       return;
     }
     const passwordHash = await hashPassword(password);
-    const [user] = await db
+    const insertResult = await db
       .insert(usersTable)
       .values({
         email: email.toLowerCase().trim(),
@@ -45,19 +46,23 @@ router.post("/users", requireAdmin, async (req, res) => {
         passwordHash,
         role: role === "admin" ? "admin" : "user",
         isActive: true,
-      })
-      .returning({
+      });
+    const [user] = await db
+      .select({
         id: usersTable.id,
         email: usersTable.email,
         name: usersTable.name,
         role: usersTable.role,
         isActive: usersTable.isActive,
         createdAt: usersTable.createdAt,
-      });
+      })
+      .from(usersTable)
+      .where(eq(usersTable.id, extractInsertId(insertResult)))
+      .limit(1);
     res.status(201).json(user);
   } catch (err: unknown) {
     const e = err as { code?: string };
-    if (e.code === "23505") {
+    if (e.code === "ER_DUP_ENTRY") {
       res.status(400).json({ error: "Email already in use" });
       return;
     }
@@ -111,18 +116,19 @@ router.patch("/users/:id", requireAdmin, async (req, res) => {
     if (isActive !== undefined) updates.isActive = isActive;
     if (password) updates.passwordHash = await hashPassword(password);
 
+    await db.update(usersTable).set(updates).where(eq(usersTable.id, id));
     const [user] = await db
-      .update(usersTable)
-      .set(updates)
-      .where(eq(usersTable.id, id))
-      .returning({
+      .select({
         id: usersTable.id,
         email: usersTable.email,
         name: usersTable.name,
         role: usersTable.role,
         isActive: usersTable.isActive,
         createdAt: usersTable.createdAt,
-      });
+      })
+      .from(usersTable)
+      .where(eq(usersTable.id, id))
+      .limit(1);
     if (!user) {
       res.status(404).json({ error: "User not found" });
       return;

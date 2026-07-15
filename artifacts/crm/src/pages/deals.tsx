@@ -151,7 +151,7 @@ export default function Deals() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold tracking-tight">Deals Pipeline</h1>
         <div className="flex items-center gap-4">
-          <ToggleGroup type="single" value={view} onValueChange={(v) => v && setView(v as "table" | "kanban")}>
+          <ToggleGroup type="single" value={view} onValueChange={(v: string) => v && setView(v as "table" | "kanban")}>
             <ToggleGroupItem value="table"><TableIcon className="w-4 h-4 mr-2" />Table</ToggleGroupItem>
             <ToggleGroupItem value="kanban"><LayoutList className="w-4 h-4 mr-2" />Kanban</ToggleGroupItem>
           </ToggleGroup>

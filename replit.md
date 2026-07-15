@@ -24,7 +24,7 @@ The preview proxy routes `/api/*` to the API server and everything else to the C
 ## Seeding the database
 
 ```bash
-pnpm --filter @workspace/scripts run seed
+npm run seed --workspace=@workspace/scripts
 ```
 
 This creates the admin user, sample leads, companies, contacts, deals, tasks, client journeys, and billings.
@@ -32,32 +32,32 @@ This creates the admin user, sample leads, companies, contacts, deals, tasks, cl
 ## Admin credentials
 
 - **Email**: admin@hiqain.com
-- **Password**: set via `pnpm --filter @workspace/scripts run seed` (dev default — change before deploying)
+- **Password**: set via `npm run seed --workspace=@workspace/scripts` (dev default - change before deploying)
 
 ## Project structure
 
-```
+```text
 artifacts/
-  crm/          – React frontend
-  api-server/   – Express REST API
-  mockup-sandbox/ – Design/component preview tool
+  crm/            - React frontend
+  api-server/     - Express REST API
+  mockup-sandbox/ - Design/component preview tool
 lib/
-  db/           – Drizzle schema + migrations
-  api-client-react/ – Generated React Query hooks
-  api-spec/     – OpenAPI spec + orval codegen config
-  api-zod/      – Generated Zod validators
+  db/               - Drizzle schema + migrations
+  api-client-react/ - Generated React Query hooks
+  api-spec/         - OpenAPI spec + orval codegen config
+  api-zod/          - Generated Zod validators
 scripts/
-  src/seed/     – Database seed script
+  src/seed/         - Database seed script
 ```
 
 ## Modules
 
-- **Leads** (`/admin/leads`) – Lead pipeline with custom columns
-- **Client Journeys** (`/admin/client-journeys`) – Client lifecycle tracking
-- **Billings** (`/admin/billings`) – Invoice and payment records
-- **Users** (`/admin/users`) – User management (admin only)
+- **Leads** (`/admin/leads`) - Lead pipeline with custom columns
+- **Client Journeys** (`/admin/client-journeys`) - Client lifecycle tracking
+- **Billings** (`/admin/billings`) - Invoice and payment records
+- **Users** (`/admin/users`) - User management (admin only)
 
 ## User preferences
 
-- Use `pnpm` for all package management (never npm or yarn)
-- Keep existing project structure — do not restructure or migrate
+- Use `npm` for package management
+- Keep the existing project structure

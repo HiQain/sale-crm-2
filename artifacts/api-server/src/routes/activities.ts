@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, activitiesTable, contactsTable, dealsTable, companiesTable, usersTable } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
 import { requireAuth } from "../lib/auth";
+import { extractInsertId } from "../lib/mysql";
 
 const router = Router();
 
@@ -53,11 +54,10 @@ router.post("/activities", requireAuth, async (req, res) => {
   try {
     const { type, title, description, occurredAt, contactId, dealId, companyId } = req.body;
     if (!title) { res.status(400).json({ error: "title is required" }); return; }
-    const [activity] = await db
+    const insertResult = await db
       .insert(activitiesTable)
-      .values({ type: type ?? "note", title, description, occurredAt: occurredAt ? new Date(occurredAt) : new Date(), contactId, dealId, companyId, userId: req.session.userId })
-      .returning();
-    const full = await getActivityWithJoins(activity.id);
+      .values({ type: type ?? "note", title, description, occurredAt: occurredAt ? new Date(occurredAt) : new Date(), contactId, dealId, companyId, userId: req.session.userId });
+    const full = await getActivityWithJoins(extractInsertId(insertResult));
     res.status(201).json(full);
   } catch (err) {
     req.log.error({ err }, "Create activity error");

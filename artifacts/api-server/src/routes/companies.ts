@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { db, companiesTable } from "@workspace/db";
-import { eq, ilike, or } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { requireAuth } from "../lib/auth";
+import { containsCI, extractInsertId } from "../lib/mysql";
 
 const router = Router();
 
@@ -11,7 +12,7 @@ router.get("/companies", requireAuth, async (req, res) => {
     const { search, industry } = req.query as Record<string, string>;
     let query = db.select().from(companiesTable).$dynamic();
     if (search) {
-      query = query.where(ilike(companiesTable.name, `%${search}%`));
+      query = query.where(containsCI(companiesTable.name, search));
     }
     if (industry) {
       query = query.where(eq(companiesTable.industry, industry));
@@ -32,10 +33,14 @@ router.post("/companies", requireAuth, async (req, res) => {
       res.status(400).json({ error: "name is required" });
       return;
     }
-    const [company] = await db
+    const insertResult = await db
       .insert(companiesTable)
-      .values({ name, industry, website, phone, address, employeeCount, annualRevenue: annualRevenue?.toString(), notes })
-      .returning();
+      .values({ name, industry, website, phone, address, employeeCount, annualRevenue: annualRevenue?.toString(), notes });
+    const [company] = await db
+      .select()
+      .from(companiesTable)
+      .where(eq(companiesTable.id, extractInsertId(insertResult)))
+      .limit(1);
     res.status(201).json(serializeCompany(company));
   } catch (err) {
     req.log.error({ err }, "Create company error");
@@ -70,7 +75,8 @@ router.patch("/companies/:id", requireAuth, async (req, res) => {
     if (employeeCount !== undefined) updates.employeeCount = employeeCount;
     if (annualRevenue !== undefined) updates.annualRevenue = annualRevenue?.toString();
     if (notes !== undefined) updates.notes = notes;
-    const [company] = await db.update(companiesTable).set(updates).where(eq(companiesTable.id, id)).returning();
+    await db.update(companiesTable).set(updates).where(eq(companiesTable.id, id));
+    const [company] = await db.select().from(companiesTable).where(eq(companiesTable.id, id)).limit(1);
     if (!company) { res.status(404).json({ error: "Company not found" }); return; }
     res.json(serializeCompany(company));
   } catch (err) {

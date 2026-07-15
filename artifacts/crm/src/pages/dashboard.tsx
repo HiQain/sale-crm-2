@@ -5,6 +5,12 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { formatDistanceToNow } from "date-fns";
 
 export default function Dashboard() {
+  const XAxisComponent = XAxis as any;
+  const YAxisComponent = YAxis as any;
+  const TooltipComponent = Tooltip as any;
+  const BarComponent = Bar as any;
+  const CellComponent = Cell as any;
+
   const { data: stats, isLoading: statsLoading } = useGetDashboardStats({ query: { queryKey: getGetDashboardStatsQueryKey() }});
   const { data: pipeline = [], isLoading: pipelineLoading } = useGetPipelineSummary({ query: { queryKey: getGetPipelineSummaryQueryKey() }});
   const { data: activities = [], isLoading: actLoading } = useGetRecentActivities({ query: { queryKey: getGetRecentActivitiesQueryKey() }});
@@ -64,25 +70,25 @@ export default function Dashboard() {
             {pipeline.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={pipeline} margin={{ top: 10, right: 10, left: 10, bottom: 20 }}>
-                  <XAxis 
+                  <XAxisComponent 
                     dataKey="stage" 
-                    tickFormatter={(v) => v.replace('_', ' ')} 
+                    tickFormatter={(v: string) => v.replace('_', ' ')} 
                     tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
                     axisLine={false}
                     tickLine={false}
                   />
-                  <YAxis 
-                    tickFormatter={(v) => `$${v/1000}k`} 
+                  <YAxisComponent 
+                    tickFormatter={(v: number) => `$${v/1000}k`} 
                     tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
                     axisLine={false}
                     tickLine={false}
                   />
-                  <Tooltip content={<CustomTooltip />} cursor={{ fill: 'hsl(var(--muted)/0.5)' }} />
-                  <Bar dataKey="totalValue" radius={[4, 4, 0, 0]}>
-                    {pipeline.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={`hsl(var(--chart-${(index % 5) + 1}))`} />
+                  <TooltipComponent content={<CustomTooltip />} cursor={{ fill: 'hsl(var(--muted)/0.5)' }} />
+                  <BarComponent dataKey="totalValue" radius={[4, 4, 0, 0]}>
+                    {pipeline.map((_, index) => (
+                      <CellComponent key={`cell-${index}`} fill={`hsl(var(--chart-${(index % 5) + 1}))`} />
                     ))}
-                  </Bar>
+                  </BarComponent>
                 </BarChart>
               </ResponsiveContainer>
             ) : (

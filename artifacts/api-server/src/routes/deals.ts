@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { db, dealsTable, contactsTable, companiesTable, usersTable } from "@workspace/db";
-import { eq, ilike, and } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../lib/auth";
+import { containsCI, extractInsertId } from "../lib/mysql";
 
 const router = Router();
 
@@ -14,7 +15,7 @@ router.get("/deals", requireAuth, async (req, res) => {
     if (req.session.role !== "admin") {
       conditions.push(eq(dealsTable.ownerId, req.session.userId!));
     }
-    if (search) conditions.push(ilike(dealsTable.title, `%${search}%`));
+    if (search) conditions.push(containsCI(dealsTable.title, search));
     if (stage) conditions.push(eq(dealsTable.stage, stage));
     if (ownerId) conditions.push(eq(dealsTable.ownerId, parseInt(ownerId)));
     if (contactId) conditions.push(eq(dealsTable.contactId, parseInt(contactId)));
@@ -58,11 +59,10 @@ router.post("/deals", requireAuth, async (req, res) => {
   try {
     const { title, stage, value, currency, probability, expectedCloseDate, contactId, companyId, ownerId, notes } = req.body;
     if (!title) { res.status(400).json({ error: "title is required" }); return; }
-    const [deal] = await db
+    const insertResult = await db
       .insert(dealsTable)
-      .values({ title, stage: stage ?? "prospecting", value: value?.toString(), currency: currency ?? "USD", probability, expectedCloseDate, contactId, companyId, ownerId, notes })
-      .returning();
-    const full = await getDealWithJoins(deal.id);
+      .values({ title, stage: stage ?? "prospecting", value: value?.toString(), currency: currency ?? "USD", probability, expectedCloseDate, contactId, companyId, ownerId, notes });
+    const full = await getDealWithJoins(extractInsertId(insertResult));
     res.status(201).json(full);
   } catch (err) {
     req.log.error({ err }, "Create deal error");
