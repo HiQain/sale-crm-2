@@ -1,6 +1,36 @@
+import { existsSync } from "node:fs";
+import path from "node:path";
 import { drizzle } from "drizzle-orm/mysql2";
 import mysql from "mysql2/promise";
 import * as schema from "./schema";
+import dotenv from "dotenv";
+
+dotenv.config({ path: ".env" });
+
+function loadDatabaseEnv() {
+  if (process.env.DATABASE_URL) {
+    return;
+  }
+
+  const candidates = [
+    path.join(process.cwd(), ".env"),
+    path.join(process.cwd(), "..", ".env"),
+    path.join(process.cwd(), "..", "..", ".env"),
+  ];
+
+  for (const candidate of candidates) {
+    if (!existsSync(candidate)) {
+      continue;
+    }
+
+    process.loadEnvFile(candidate);
+    if (process.env.DATABASE_URL) {
+      return;
+    }
+  }
+}
+
+loadDatabaseEnv();
 
 if (!process.env.DATABASE_URL) {
   throw new Error(

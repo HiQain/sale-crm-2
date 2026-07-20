@@ -124,7 +124,7 @@ app.use("/api", router);
 if (hasBuiltFrontend) {
   app.use(express.static(publicDir));
 
-  app.get("*", (req, res, next) => {
+  app.get("/{*splat}", (req, res, next) => {
     if (req.path.startsWith("/api")) {
       next();
       return;
