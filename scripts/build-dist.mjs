@@ -7,6 +7,7 @@ const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const outputDir = path.join(rootDir, "dist");
 const apiDir = path.join(rootDir, "artifacts", "api-server");
 const crmDir = path.join(rootDir, "artifacts", "crm");
+const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 
 function run(command, options = {}) {
   return new Promise((resolve, reject) => {
@@ -31,12 +32,12 @@ function run(command, options = {}) {
 async function buildDeployDist() {
   await rm(outputDir, { recursive: true, force: true });
 
-  await run("npm.cmd run typecheck --workspace=@workspace/api-server");
-  await run("npm.cmd run typecheck --workspace=@workspace/crm");
+  await run(`${npmCommand} run typecheck --workspace=@workspace/api-server`);
+  await run(`${npmCommand} run typecheck --workspace=@workspace/crm`);
 
-  await run("npm.cmd run build --workspace=@workspace/api-server");
+  await run(`${npmCommand} run build --workspace=@workspace/api-server`);
 
-  await run("npm.cmd run build --workspace=@workspace/crm", {
+  await run(`${npmCommand} run build --workspace=@workspace/crm`, {
     env: {
       ...process.env,
       NODE_ENV: "production",
