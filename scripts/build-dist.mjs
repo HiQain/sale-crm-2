@@ -32,6 +32,7 @@ function run(command, options = {}) {
 async function buildDeployDist() {
   await rm(outputDir, { recursive: true, force: true });
 
+  await run(`${npmCommand} run typecheck:libs`);
   await run(`${npmCommand} run typecheck --workspace=@workspace/api-server`);
   await run(`${npmCommand} run typecheck --workspace=@workspace/crm`);
 

@@ -49,7 +49,7 @@ router.post("/leads/columns", requireAuth, async (req, res) => {
     const existing = await db
       .select({ fieldKey: leadCustomColumnsTable.fieldKey })
       .from(leadCustomColumnsTable);
-    const keys = new Set(existing.map((row) => row.fieldKey));
+    const keys = new Set(existing.map((row: (typeof existing)[number]) => row.fieldKey));
     let candidate = fieldKey;
     let suffix = 2;
     while (keys.has(candidate)) {

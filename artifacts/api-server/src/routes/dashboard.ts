@@ -62,7 +62,9 @@ router.get("/dashboard/pipeline", requireAuth, async (req, res) => {
       .from(dealsTable)
       .groupBy(dealsTable.stage);
 
-    const stageMap = Object.fromEntries(rows.map(r => [r.stage, r]));
+    const stageMap = Object.fromEntries(
+      rows.map((row: (typeof rows)[number]) => [row.stage, row]),
+    );
     const result = stages.map(stage => ({
       stage,
       count: Number(stageMap[stage]?.count ?? 0),
