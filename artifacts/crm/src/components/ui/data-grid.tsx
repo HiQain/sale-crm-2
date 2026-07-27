@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState, type ReactNode } from "react";
+import React, { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AgGridReact } from "ag-grid-react";
 import type {
   CellClickedEvent,
@@ -60,6 +60,21 @@ interface GridColumnOption {
   title: string;
   visible: boolean;
   pinned: "left" | "right" | null;
+}
+
+function areGridColumnsEqual(a: GridColumnOption[], b: GridColumnOption[]): boolean {
+  if (a.length !== b.length) return false;
+
+  return a.every((column, index) => {
+    const other = b[index];
+    return (
+      other != null &&
+      column.id === other.id &&
+      column.title === other.title &&
+      column.visible === other.visible &&
+      column.pinned === other.pinned
+    );
+  });
 }
 
 function widthToPixels(width?: string): number {
@@ -263,8 +278,12 @@ export function DataGrid<T>({
       };
     });
 
-    setGridColumns(nextColumns);
+    setGridColumns((current) => (areGridColumnsEqual(current, nextColumns) ? current : nextColumns));
   };
+
+  useEffect(() => {
+    refreshGridColumns();
+  }, [columns]);
 
   const commitNewRow = () => {
     if (!onAddInline) return;
